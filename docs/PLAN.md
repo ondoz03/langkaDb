@@ -2,7 +2,7 @@
 ## Development Execution Plan
 
 **Version:** 1.0.0  
-**Status:** Active  
+**Status:** Phase 1 ✅ (Foundation Setup) — Siap lanjut ke Phase 2  
 **Project:** AetherDB AI — AI-Powered Database Intelligence Desktop App  
 **Stack:** Laravel 13 + Vue 3 + Inertia.js + Tauri v2 + AI Multi-Agent  
 **Last Updated:** 2026-05-20
@@ -49,10 +49,10 @@ Seluruh pengembangan mengikuti prinsip:
 
 ### Backend
 
-- [ ] PHP 8.4+
-- [ ] Laravel 13
+- [x] PHP 8.4+
+- [x] Laravel 13
 - [ ] Laravel Reverb (WebSocket)
-- [ ] Laravel Queue (Redis)
+- [ ] Laravel Queue (Redis) — using `database` driver, Redis not active
 - [ ] Laravel Scheduler
 - [ ] Doctrine DBAL (DB introspection)
 - [ ] OpenAI PHP SDK
@@ -61,19 +61,19 @@ Seluruh pengembangan mengikuti prinsip:
 
 ### Frontend
 
-- [ ] Vue 3 + TypeScript
-- [ ] Inertia.js
-- [ ] Vite
-- [ ] TailwindCSS
-- [ ] shadcn/ui (Vue port)
-- [ ] Framer Motion (via @vueuse/motion)
-- [ ] Lucide Icons
-- [ ] Vue Flow (graph engine)
-- [ ] Pinia (state management)
+- [x] Vue 3 + TypeScript
+- [x] Inertia.js
+- [x] Vite
+- [x] TailwindCSS
+- [x] shadcn/ui (Vue port)
+- [x] Framer Motion (via @vueuse/motion)
+- [x] Lucide Icons
+- [x] Vue Flow (graph engine) — dependencies installed, components not yet built
+- [x] Pinia (state management)
 
 ### Desktop
 
-- [ ] Tauri v2
+- [ ] Tauri v2 — not started
 - [ ] Rust toolchain (stable)
 - [ ] Tauri Plugin: secure store
 - [ ] Tauri Plugin: updater
@@ -83,11 +83,11 @@ Seluruh pengembangan mengikuti prinsip:
 ### DevOps / Tooling
 
 - [ ] Redis (queue + cache)
-- [ ] Pest PHP (testing)
+- [x] Pest PHP (testing)
 - [ ] Vitest (frontend testing)
-- [ ] ESLint + Prettier
-- [ ] Laravel Pint (PHP formatter)
-- [ ] GitHub Actions (CI/CD)
+- [x] ESLint + Prettier
+- [x] Laravel Pint (PHP formatter)
+- [x] GitHub Actions (CI/CD)
 
 ---
 
@@ -226,29 +226,39 @@ npx shadcn-vue@latest add tooltip command popover
 
 ### 4.4 Auth Module
 
-- [ ] Local auth (username + password, stored lokal via Tauri)
-- [ ] Session management dengan Laravel Sanctum
-- [ ] Auth middleware untuk semua route
-- [ ] Login page dengan keyboard-first UX
+- [x] Local auth (username + password via Laravel Fortify) — Tauri vault not yet implemented
+- [ ] Session management dengan Laravel Sanctum — Fortify session-based, Sanctum not installed
+- [x] Auth middleware untuk semua route (auth + verified)
+- [x] Login page dengan keyboard-first UX
+- [x] Register page, Forgot/Reset Password, Verify Email, Two-Factor Challenge
+- [x] Passkeys (WebAuthn) support via Fortify + frontend package
 
 ### 4.5 App Shell Layout
 
-- [ ] `AppLayout.vue` — sidebar + main content area
-- [ ] `SidebarLayout.vue` — collapsible sidebar, navigation links
-- [ ] Command palette (Cmd+K) — global keyboard navigation
-- [ ] Toast notification system
+- [x] `AppLayout.vue` — sidebar + main content area
+- [x] `AppSidebarLayout.vue` — collapsible sidebar, navigation links
+- [x] `AppHeaderLayout.vue` — header layout variant
+- [x] Auth layouts — AuthCardLayout, AuthSimpleLayout, AuthSplitLayout
+- [x] Settings layout
+- [x] Command palette (Cmd+K) — `CommandPalette.vue` + shadcn command component
+- [x] Toast notification system — vue-sonner + flashToast composable
 
 ### 4.6 Checklist Phase 1
 
-- [ ] Laravel 13 installed + configured
-- [ ] Inertia.js SSR disabled (desktop-first)
-- [ ] Vue 3 + TypeScript working
-- [ ] TailwindCSS + shadcn/ui installed
-- [ ] Global theme tokens configured
-- [ ] App shell layout selesai
-- [ ] Auth flow selesai (login/logout)
-- [ ] Navigation antar halaman berjalan
-- [ ] Pinia store initialized
+- [x] Laravel 13 installed + configured (v13.11.1, PHP 8.4.21)
+- [x] Inertia.js SSR disabled (desktop-first)
+- [x] Vue 3 + TypeScript working
+- [x] TailwindCSS + shadcn/ui installed (25+ UI components)
+- [x] Global theme tokens configured (light/dark/system via `useAppearance`)
+- [x] App shell layout selesai (AppLayout, SidebarLayout, AuthLayouts, Settings)
+- [x] Auth flow selesai (login/logout/register via Laravel Fortify)
+- [x] Navigation antar halaman berjalan (Dashboard, Connections, Graph, Insights, Queries, Monitoring, Settings)
+- [x] Pinia store initialized (connection, schema, ai, ui)
+- [x] Wayfinder auto-route generation configured
+- [x] Pages scaffolded: Dashboard, Connections, Graph, Insights, Queries, Monitoring, Settings (Profile/Security/Appearance)
+- [x] GitHub Actions CI/CD workflows (lint + tests)
+- [x] Pest PHP testing framework installed
+- [x] Passkeys (WebAuthn) support configured
 
 ---
 
@@ -302,11 +312,11 @@ CREATE TABLE connections (
 ```
 
 **Frontend — Connection Pages:**
-- [ ] `/connections` — list view semua koneksi
-- [ ] Dialog: tambah / edit koneksi (form dengan SSH toggle)
-- [ ] Connection status badge (connected/disconnected/error)
-- [ ] `useConnection.ts` composable
-- [ ] `connection` Pinia store
+- [x] `/connections` — list view semua koneksi (terhubung ke API)
+- [x] Dialog: tambah / edit koneksi (form dengan SSH toggle, SSL toggle)
+- [x] Connection status badge (connected/disconnected/error)
+- [x] `useConnection.ts` composable (fetch, create, update, delete, test)
+- [x] `connection` Pinia store (CRUD methods + active connection)
 
 ### 5.2 Schema Parser Engine
 
@@ -371,8 +381,8 @@ GET  /api/connections/{id}/schema/context  # AI-ready context
 
 ### 5.3 Checklist Phase 2
 
-- [ ] Connection CRUD selesai
-- [ ] Credential encryption (AES-256) selesai
+- [x] Connection CRUD selesai (6 API endpoints + backend module)
+- [x] Credential encryption (AES-256 via Laravel Crypt) selesai
 - [ ] SSH tunnel via Tauri shell command working
 - [ ] SSL connection working
 - [ ] Doctrine DBAL introspection selesai

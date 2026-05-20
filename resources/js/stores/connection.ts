@@ -11,7 +11,12 @@ export interface Connection {
   username: string
   ssl_enabled: boolean
   ssh_enabled: boolean
+  ssh_host: string | null
+  ssh_port: number | null
+  ssh_user: string | null
   status: 'connected' | 'disconnected' | 'error'
+  created_at?: string
+  updated_at?: string
 }
 
 export const useConnectionStore = defineStore('connection', () => {
@@ -25,6 +30,26 @@ export const useConnectionStore = defineStore('connection', () => {
 
   function setConnections(list: Connection[]) {
     connections.value = list
+  }
+
+  function addConnection(conn: Connection) {
+    connections.value.unshift(conn)
+  }
+
+  function updateConnection(conn: Connection) {
+    const idx = connections.value.findIndex((c) => c.id === conn.id)
+
+    if (idx !== -1) {
+      connections.value[idx] = conn
+    }
+  }
+
+  function removeConnection(id: string) {
+    connections.value = connections.value.filter((c) => c.id !== id)
+
+    if (activeConnectionId.value === id) {
+      activeConnectionId.value = null
+    }
   }
 
   function setActive(id: string | null) {
@@ -41,6 +66,9 @@ export const useConnectionStore = defineStore('connection', () => {
     activeConnection,
     loading,
     setConnections,
+    addConnection,
+    updateConnection,
+    removeConnection,
     setActive,
     setLoading,
   }
