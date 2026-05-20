@@ -23,7 +23,11 @@ const path = computed(() => {
   <BaseEdge
     :id="props.id"
     :path="path"
-    :style="{ stroke: props.selected ? '#fff' : '#525252', strokeWidth: props.selected ? 2 : 1 }"
-    class="transition-all"
+    :style="{
+      stroke: props.selected ? '#818cf8' : '#525252',
+      strokeWidth: props.selected ? 2 : 1,
+      opacity: 1,
+      transition: 'all 0.15s ease',
+    }"
   />
 </template>

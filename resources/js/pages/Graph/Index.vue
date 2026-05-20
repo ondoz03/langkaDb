@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3'
+import type { Node } from '@vue-flow/core'
 import { onMounted, ref } from 'vue'
 import SchemaGraph from '@/components/graph/SchemaGraph.vue'
+import TableDetailPanel from '@/components/graph/TableDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
 import { useConnectionStore } from '@/stores/connection'
 import type { Connection } from '@/stores/connection'
 
 const store = useConnectionStore()
-const { nodes, edges, loading, loadSchema } = useGraph()
+const { nodes, edges, loading, hoveredNode, selectedNode, loadSchema, onNodeClick, closePanel, onViewportChange } = useGraph()
 const connError = ref<string | null>(null)
 
 onMounted(async () => {
@@ -38,6 +40,18 @@ async function selectConnection(conn: Connection) {
   store.setActive(conn.id)
   await loadSchema(conn.id)
 }
+
+function handleNodeClick(node: Node) {
+  onNodeClick(node)
+}
+
+function handleNodeEnter(nodeId: string) {
+  hoveredNode.value = nodeId
+}
+
+function handleNodeLeave() {
+  hoveredNode.value = null
+}
 </script>
 
 <template>
@@ -62,7 +76,7 @@ async function selectConnection(conn: Connection) {
       </div>
       <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{{ nodes.length }} tables</span>
-        <span v-if="edges.length">· {{ edges.length }} relations</span>
+        <span v-if="edges.length"> · {{ edges.length }} relations</span>
       </div>
     </div>
 
@@ -75,7 +89,22 @@ async function selectConnection(conn: Connection) {
     </div>
 
     <div v-else class="flex-1">
-      <SchemaGraph :nodes="nodes" :edges="edges" :loading="loading" />
+      <SchemaGraph
+        :nodes="nodes"
+        :edges="edges"
+        :loading="loading"
+        :hovered-node="hoveredNode"
+        @node-click="handleNodeClick"
+        @node-enter="handleNodeEnter"
+        @node-leave="handleNodeLeave"
+        @viewport-change="onViewportChange"
+      />
     </div>
   </div>
+
+  <TableDetailPanel
+    :open="selectedNode !== null"
+    :table="selectedNode"
+    @close="closePanel"
+  />
 </template>

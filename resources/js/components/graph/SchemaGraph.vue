@@ -16,9 +16,17 @@ interface Props {
   nodes: Node[]
   edges: Edge[]
   loading?: boolean
+  hoveredNode?: string | null
 }
 
 defineProps<Props>()
+
+const emit = defineEmits<{
+  (e: 'node-click', node: Node): void
+  (e: 'node-enter', nodeId: string): void
+  (e: 'node-leave'): void
+  (e: 'viewport-change', viewport: { x: number; y: number; zoom: number }): void
+}>()
 </script>
 
 <template>
@@ -30,13 +38,19 @@ defineProps<Props>()
     <VueFlow
       :nodes="nodes"
       :edges="edges"
-      :default-viewport="{ zoom: 0.6 }"
+      :default-viewport="{ x: 0, y: 0, zoom: 0.6 }"
       fit-view-on-init
-      :min-zoom="0.1"
+      :min-zoom="0.05"
       :max-zoom="4"
+      :node-styles="(n: Node) => ({ opacity: hoveredNode && hoveredNode !== n.id ? 0.3 : 1, transition: 'all 0.15s ease' })"
+      :default-edge-options="{ style: { stroke: '#525252', strokeWidth: 1 } }"
       class="h-full w-full"
+      @node-click="emit('node-click', $event.node)"
+      @node-enter="emit('node-enter', $event.node.id)"
+      @node-leave="emit('node-leave')"
+      @viewport-change="emit('viewport-change', { x: $event.x, y: $event.y, zoom: $event.zoom })"
     >
-      <Background :gap="20" pattern-color="#262626" />
+      <Background :gap="24" pattern-color="#262626" />
 
       <Controls
         show-zoom
@@ -63,6 +77,10 @@ defineProps<Props>()
 </template>
 
 <style>
+.vue-flow {
+  background: hsl(var(--background));
+}
+
 .vue-flow__node {
   cursor: pointer;
 }
@@ -71,7 +89,6 @@ defineProps<Props>()
   display: flex;
   box-shadow: none;
   border: 1px solid hsl(var(--border));
-  border-radius: 0;
   overflow: hidden;
 }
 
@@ -91,10 +108,6 @@ defineProps<Props>()
 
 .vue-flow__controls button:hover {
   background: hsl(var(--accent));
-}
-
-.vue-flow__background {
-  background: hsl(var(--background));
 }
 
 .vue-flow__minimap {
