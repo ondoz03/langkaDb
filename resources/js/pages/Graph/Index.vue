@@ -1,17 +1,81 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import PlaceholderPattern from '@/components/PlaceholderPattern.vue';
+import { Head } from '@inertiajs/vue3'
+import { onMounted, ref } from 'vue'
+import SchemaGraph from '@/components/graph/SchemaGraph.vue'
+import { useGraph } from '@/composables/useGraph'
+import { useConnectionStore } from '@/stores/connection'
+import type { Connection } from '@/stores/connection'
+
+const store = useConnectionStore()
+const { nodes, edges, loading, loadSchema } = useGraph()
+const connError = ref<string | null>(null)
+
+onMounted(async () => {
+  if (store.connections.length === 0) {
+    try {
+      const res = await fetch('/api/connections')
+      const json = await res.json()
+
+      if (json.data) {
+        store.setConnections(json.data)
+      }
+    } catch {
+      connError.value = 'Failed to load connections'
+
+      return
+    }
+  }
+
+  const conn = store.activeConnection ?? store.connections[0]
+
+  if (conn) {
+    selectConnection(conn)
+  }
+})
+
+async function selectConnection(conn: Connection) {
+  connError.value = null
+  store.setActive(conn.id)
+  await loadSchema(conn.id)
+}
 </script>
 
 <template>
   <Head title="Database Graph" />
 
-  <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-medium">Database Graph</h2>
+  <div class="flex h-full flex-1 flex-col font-mono">
+    <div class="flex items-center justify-between border-b border-border px-4 py-2">
+      <div class="flex items-center gap-3">
+        <h2 class="text-sm font-medium text-foreground">Database Graph</h2>
+        <select
+          class="border border-border bg-card px-2 py-1 text-xs text-foreground outline-none"
+          :value="store.activeConnectionId ?? ''"
+          @change="(e) => { const conn = store.connections.find(c => c.id === (e.target as HTMLSelectElement).value); if (conn) selectConnection(conn) }"
+        >
+          <option value="" disabled>Select connection</option>
+          <option
+            v-for="conn in store.connections"
+            :key="conn.id"
+            :value="conn.id"
+          >{{ conn.name }}</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{{ nodes.length }} tables</span>
+        <span v-if="edges.length">· {{ edges.length }} relations</span>
+      </div>
     </div>
-    <div class="relative flex-1 border border-sidebar-border/70 dark:border-sidebar-border">
-      <PlaceholderPattern />
+
+    <div v-if="connError" class="flex flex-1 items-center justify-center font-mono text-sm text-muted-foreground">
+      {{ connError }}
+    </div>
+
+    <div v-else-if="store.connections.length === 0" class="flex flex-1 items-center justify-center font-mono text-sm text-muted-foreground">
+      No database connections. Add one first.
+    </div>
+
+    <div v-else class="flex-1">
+      <SchemaGraph :nodes="nodes" :edges="edges" :loading="loading" />
     </div>
   </div>
 </template>

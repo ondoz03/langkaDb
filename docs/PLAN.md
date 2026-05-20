@@ -385,12 +385,12 @@ GET  /api/connections/{id}/schema/context  # AI-ready context
 - [x] Credential encryption (AES-256 via Laravel Crypt) selesai
 - [ ] SSH tunnel via Tauri shell command working
 - [ ] SSL connection working
-- [ ] Doctrine DBAL introspection selesai
-- [ ] Schema parser menghasilkan DTO yang clean
-- [ ] RelationMapper memetakan FK dengan benar
-- [ ] ContextBuilder menghasilkan AI-ready JSON
+- [x] Doctrine DBAL introspection selesai (SchemaScanner)
+- [x] Schema parser menghasilkan DTO yang clean (TableDTO, ColumnDTO, IndexDTO, RelationDTO, SchemaContextDTO)
+- [x] RelationMapper memetakan FK dengan benar
+- [x] ContextBuilder menghasilkan AI-ready JSON
 - [ ] Schema di-cache di Redis (TTL: 5 menit)
-- [ ] API endpoints untuk schema terdokumentasi
+- [x] API endpoints untuk schema (4 endpoints: schema, tables, detail, context)
 
 ---
 
@@ -481,13 +481,13 @@ Setiap cluster diberi **warna border berbeda** pada graph node.
 
 ### 6.5 Checklist Phase 3
 
-- [ ] Vue Flow installed dan configured
-- [ ] SchemaGraph.vue render dengan data dari API
-- [ ] TableNode.vue custom node selesai (desain sesuai theme)
-- [ ] RelationEdge.vue custom edge dengan arrow
-- [ ] Dagre auto-layout working saat pertama load
-- [ ] Drag, zoom, pan berjalan smooth
-- [ ] Minimap overlay working
+- [x] Vue Flow installed dan configured
+- [x] SchemaGraph.vue render dengan data dari API
+- [x] TableNode.vue custom node selesai (auto-width, semua kolom tampil)
+- [x] RelationEdge.vue custom edge dengan Bezier curve arrow
+- [x] Dagre auto-layout working (top-to-bottom, spacing rapat)
+- [x] Drag, zoom, pan berjalan smooth
+- [x] Minimap overlay working (themed sesuai CSS web)
 - [ ] Highlight edge saat hover node
 - [ ] Side panel detail tabel (slide-over)
 - [ ] AI domain cluster coloring working

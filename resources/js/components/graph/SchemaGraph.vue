@@ -1,0 +1,103 @@
+<script setup lang="ts">
+import { Background } from '@vue-flow/background'
+import { Controls } from '@vue-flow/controls'
+import { VueFlow } from '@vue-flow/core'
+import type { Node, Edge } from '@vue-flow/core'
+import { MiniMap } from '@vue-flow/minimap'
+import RelationEdge from '@/components/graph/RelationEdge.vue'
+import TableNode from '@/components/graph/TableNode.vue'
+
+import '@vue-flow/core/dist/style.css'
+import '@vue-flow/core/dist/theme-default.css'
+import '@vue-flow/controls/dist/style.css'
+import '@vue-flow/minimap/dist/style.css'
+
+interface Props {
+  nodes: Node[]
+  edges: Edge[]
+  loading?: boolean
+}
+
+defineProps<Props>()
+</script>
+
+<template>
+  <div class="relative h-full w-full overflow-hidden">
+    <div v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center bg-background/50 font-mono text-sm text-muted-foreground">
+      Loading schema graph...
+    </div>
+
+    <VueFlow
+      :nodes="nodes"
+      :edges="edges"
+      :default-viewport="{ zoom: 0.6 }"
+      fit-view-on-init
+      :min-zoom="0.1"
+      :max-zoom="4"
+      class="h-full w-full"
+    >
+      <Background :gap="20" pattern-color="#262626" />
+
+      <Controls
+        show-zoom
+        show-fit-view
+        position="bottom-right"
+        class="!font-mono"
+      />
+
+      <MiniMap
+        node-color="#262626"
+        mask-color="rgba(0,0,0,0.6)"
+        class="!bottom-16 !left-3 !top-auto !right-auto !border !border-border !shadow-lg"
+        :style="{ background: 'hsl(0 0% 7%)' }"
+      />
+
+      <template #node-table="nodeProps">
+        <TableNode v-bind="nodeProps" />
+      </template>
+      <template #edge-relation="edgeProps">
+        <RelationEdge v-bind="edgeProps" />
+      </template>
+    </VueFlow>
+  </div>
+</template>
+
+<style>
+.vue-flow__node {
+  cursor: pointer;
+}
+
+.vue-flow__controls {
+  display: flex;
+  box-shadow: none;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0;
+  overflow: hidden;
+}
+
+.vue-flow__controls button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-right: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  fill: hsl(var(--foreground));
+  cursor: pointer;
+}
+
+.vue-flow__controls button:last-child {
+  border-right: none;
+}
+
+.vue-flow__controls button:hover {
+  background: hsl(var(--accent));
+}
+
+.vue-flow__background {
+  background: hsl(var(--background));
+}
+
+.vue-flow__minimap {
+  border-radius: 0 !important;
+}
+</style>
