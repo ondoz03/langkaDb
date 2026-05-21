@@ -2,10 +2,10 @@
 ## Development Execution Plan
 
 **Version:** 1.0.0  
-**Status:** Phase 1 ✅ (Foundation Setup) — Siap lanjut ke Phase 2  
+**Status:** Phase 4 ✅ (AI Engine) — Frontend selesai, backend AI agent berjalan  
 **Project:** AetherDB AI — AI-Powered Database Intelligence Desktop App  
 **Stack:** Laravel 13 + Vue 3 + Inertia.js + Tauri v2 + AI Multi-Agent  
-**Last Updated:** 2026-05-20
+**Last Updated:** 2026-05-21
 
 ---
 
@@ -491,10 +491,10 @@ Setiap cluster diberi **warna border berbeda** pada graph node.
 - [x] Dagre auto-layout working (top-to-bottom, spacing rapat)
 - [x] Drag, zoom, pan berjalan smooth
 - [x] Minimap overlay working (themed sesuai CSS web)
-- [ ] Highlight edge saat hover node
-- [ ] Side panel detail tabel (slide-over)
-- [ ] AI domain cluster coloring working
-- [ ] Graph state persisted di Pinia store
+- [x] Highlight edge saat hover node (hover → edge terang, node lain redup)
+- [x] Side panel detail tabel (slide-over via shadcn Sheet)
+- [x] Search + Filter (Connected only) + Rearrange button
+- [ ] AI domain cluster coloring working (tunggu Phase 4 AI)
 
 ---
 
@@ -654,12 +654,14 @@ ORDER BY sum_timer_wait DESC LIMIT 50;
 
 ### 7.7 Checklist Phase 4
 
-- [ ] OpenAI PHP SDK integrated
-- [ ] Anthropic PHP SDK integrated
-- [ ] AIRouter.php routing ke model berdasarkan task type
-- [ ] SchemaAgent.php selesai (domain clustering, quality score)
-- [ ] OptimizationAgent.php selesai (missing index, duplicate index)
-- [ ] SecurityAgent.php selesai (permission audit, PII detection)
+- [x] AIRouter.php routing ke model (OpenAI, DeepSeek, Anthropic + rule-based fallback)
+- [x] SchemaAgent.php selesai (domain clustering, quality score)
+- [x] AI Chat streaming (SSE via Laravel stream response)
+- [x] AI Insights page — analyze button + history (tersimpan di DB)
+- [x] Query Analyzer — AI Assistant panel + chat history + Copy SQL + Apply SQL
+- [x] Settings AI — provider config (API key), model selector, system prompt custom
+- [x] Single active connection flow — sidebar menu muncul/sembunyi
+- [x] DeepSeek, OpenAI, Anthropic integration (via curl, OpenAI-compatible API)
 - [ ] DocumentationAgent.php selesai (markdown doc generation)
 - [ ] AI Chat endpoint selesai dengan streaming support
 - [ ] Chat UI komponen selesai (AIChatPanel.vue)

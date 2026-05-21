@@ -23,6 +23,10 @@ const sidebarNavItems: NavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
     },
+    {
+        title: 'AI',
+        href: '/settings/ai',
+    },
 ];
 
 const { isCurrentOrParentUrl } = useCurrentUrl();

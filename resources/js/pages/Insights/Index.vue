@@ -1,32 +1,105 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3'
+import { onMounted, ref } from 'vue'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Spinner } from '@/components/ui/spinner'
+import { getKey } from '@/modules/ai/apiKeys'
+import { MODELS } from '@/modules/ai/config'
+import { useConnectionStore } from '@/stores/connection'
 
-const categories = [
-  { title: 'Missing Indexes', count: 3, severity: 'high', desc: 'Columns used in WHERE/JOIN without index' },
-  { title: 'Slow Queries', count: 7, severity: 'medium', desc: 'Queries exceeding 1s execution time' },
-  { title: 'Schema Issues', count: 2, severity: 'low', desc: 'Naming inconsistencies, missing constraints' },
-  { title: 'Duplicate Indexes', count: 1, severity: 'medium', desc: 'Redundant overlapping indexes' },
-  { title: 'Table Size', count: '1.2 GB', severity: 'info', desc: 'Total estimated database size' },
-  { title: 'Connection Health', count: '2/3', severity: 'good', desc: 'Connected databases' },
-]
+interface Analysis {
+  id: number
+  connection_id: string
+  connection_name: string
+  provider: string
+  score: number
+  timestamp: string
+  result: { findings: { severity: string; message: string }[]; recommendations: { priority: string; message: string }[] }
+}
 
-function severityColor(s: string) {
-  switch (s) {
-    case 'high': return 'text-red-500'
-    case 'medium': return 'text-amber-500'
-    case 'low': return 'text-blue-500'
-    case 'good': return 'text-green-500'
-    default: return 'text-muted-foreground'
+const store = useConnectionStore()
+const allHistory = ref<Analysis[]>([])
+const latestResult = ref<Analysis | null>(null)
+const loading = ref(false)
+const analyzing = ref(false)
+const showHistory = ref(false)
+
+onMounted(fetchHistory)
+
+async function fetchHistory() {
+  try {
+    const res = await fetch('/api/ai/analyses')
+    const json = await res.json()
+
+    if (json.data) {
+      allHistory.value = json.data
+
+      if (!latestResult.value && json.data.length > 0) {
+        latestResult.value = json.data[0]
+      }
+
+    }
+  } catch {
+    // silent
   }
 }
 
-function severityBg(s: string) {
+async function analyze() {
+  if (!store.activeConnection || analyzing.value) {
+return
+}
+
+  const now = Date.now()
+  const lastSent = parseInt(sessionStorage.getItem('ai_analyze_at') ?? '0', 10)
+
+  if (now - lastSent < 10_000) {
+return
+}
+
+  sessionStorage.setItem('ai_analyze_at', String(now))
+
+  analyzing.value = true
+  loading.value = true
+
+  try {
+    const modelId = localStorage.getItem('aetherdb_default_model') ?? ''
+    const model = MODELS.find(m => m.id === modelId)
+    const provider = model?.provider ?? 'openai'
+    const apiKey = getKey(provider) ?? ''
+    const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
+
+    await fetch(`/api/connections/${store.activeConnection.id}/ai/analyze`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ api_key: apiKey, provider, system_prompt: systemPrompt, connection_name: store.activeConnection.name }),
+    })
+
+    await fetchHistory()
+  } catch {
+    // silent
+  } finally {
+    loading.value = false
+    analyzing.value = false
+  }
+}
+
+async function deleteAnalysis(id: number) {
+  await fetch(`/api/ai/analyses/${id}`, { method: 'DELETE' })
+  allHistory.value = allHistory.value.filter(h => h.id !== id)
+
+  if (latestResult.value?.id === id) {
+    latestResult.value = allHistory.value[0] ?? null
+  }
+}
+
+function severityColor(s: string) {
   switch (s) {
-    case 'high': return 'bg-red-500/10'
-    case 'medium': return 'bg-amber-500/10'
-    case 'low': return 'bg-blue-500/10'
-    case 'good': return 'bg-green-500/10'
-    default: return 'bg-muted'
+    case 'high': return 'bg-red-500/10 text-red-500'
+    case 'medium': return 'bg-amber-500/10 text-amber-500'
+    case 'low': return 'bg-blue-500/10 text-blue-500'
+    default: return 'bg-muted text-muted-foreground'
   }
 }
 </script>
@@ -37,72 +110,104 @@ function severityBg(s: string) {
   <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4 font-mono">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-medium text-foreground">AI Insights</h2>
-      <span class="text-xs text-muted-foreground">Last analyzed: —</span>
+      <div class="flex items-center gap-2">
+        <Button size="sm" variant="outline" :disabled="allHistory.length === 0" @click="showHistory = true">
+          History ({{ allHistory.length }})
+        </Button>
+        <Button size="sm" :disabled="!store.activeConnection || analyzing" @click="analyze">
+          <Spinner v-if="analyzing" />
+          {{ analyzing ? 'Analyzing...' : 'Analyze Schema' }}
+        </Button>
+      </div>
     </div>
 
-    <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-      <div
-        v-for="cat in categories"
-        :key="cat.title"
-        class="border border-border bg-card p-4"
-      >
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-medium text-foreground">{{ cat.title }}</span>
-          <span
-            class="px-2 py-0.5 text-xs font-medium"
-            :class="[severityColor(cat.severity), severityBg(cat.severity)]"
+    <div v-if="!store.activeConnection" class="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+      No active connection
+    </div>
+
+    <div v-else-if="!latestResult && !loading" class="flex flex-1 items-center justify-center">
+      <div class="text-center">
+        <p class="text-sm text-muted-foreground">No analysis yet</p>
+        <p class="mt-1 text-xs text-muted-foreground">Click "Analyze Schema" to get AI insights about your database</p>
+      </div>
+    </div>
+
+    <div v-else-if="loading" class="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+      Analyzing with AI...
+    </div>
+
+    <template v-else-if="latestResult">
+      <div class="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{{ latestResult.connection_name }}</span>
+        <span>·</span>
+        <span>Score: {{ latestResult.score }}/100</span>
+        <span>·</span>
+        <span>{{ latestResult.timestamp }}</span>
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-2">
+        <div
+          v-for="f in (latestResult.result?.findings ?? [])"
+          :key="f.message"
+          class="border border-border bg-card p-4"
+        >
+          <span class="inline-block px-1.5 py-0.5 text-[10px] font-medium" :class="severityColor(f.severity)">{{ f.severity }}</span>
+          <p class="mt-2 text-xs text-foreground">{{ f.message }}</p>
+        </div>
+      </div>
+
+      <div v-if="latestResult.result?.recommendations?.length" class="border border-border bg-card p-4">
+        <h3 class="text-sm font-medium text-foreground">Recommendations</h3>
+        <div class="mt-3 divide-y divide-border text-xs">
+          <div
+            v-for="r in latestResult.result.recommendations"
+            :key="r.message"
+            class="flex items-start gap-3 py-2"
           >
-            {{ cat.count }}
-          </span>
-        </div>
-        <p class="mt-1 text-xs text-muted-foreground">{{ cat.desc }}</p>
-      </div>
-    </div>
-
-    <div class="border border-border bg-card p-4">
-      <h3 class="text-sm font-medium text-foreground">Recommendations</h3>
-      <div class="mt-3 divide-y divide-border text-xs">
-        <div class="flex items-start gap-3 py-2">
-          <span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />
-          <div>
-            <p class="text-foreground">Add index on <code class="text-amber-500">orders.created_at</code></p>
-            <p class="text-muted-foreground">Used in WHERE clause across 12 slow queries</p>
-          </div>
-        </div>
-        <div class="flex items-start gap-3 py-2">
-          <span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-          <div>
-            <p class="text-foreground">Review <code class="text-amber-500">users.email</code> unique constraint</p>
-            <p class="text-muted-foreground">Potential duplicate entries detected</p>
-          </div>
-        </div>
-        <div class="flex items-start gap-3 py-2">
-          <span class="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-          <div>
-            <p class="text-foreground">Normalize <code class="text-amber-500">address</code> field in orders</p>
-            <p class="text-muted-foreground">Repeated data across 1,500 rows</p>
+            <span
+              class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+              :class="r.priority === 'high' ? 'bg-red-500' : r.priority === 'medium' ? 'bg-amber-500' : 'bg-blue-500'"
+            />
+            <div>
+              <p class="text-foreground">{{ r.message }}</p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <div class="border border-border bg-card p-4">
-      <h3 class="text-sm font-medium text-foreground">Health Score</h3>
-      <div class="mt-3 flex items-center gap-4">
-        <div class="flex h-20 w-20 items-center justify-center border border-border bg-muted">
-          <span class="text-2xl font-bold text-foreground">78</span>
-        </div>
-        <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-          <span class="text-muted-foreground">Structure</span>
-          <span class="text-right text-foreground">85/100</span>
-          <span class="text-muted-foreground">Performance</span>
-          <span class="text-right text-foreground">72/100</span>
-          <span class="text-muted-foreground">Index Quality</span>
-          <span class="text-right text-foreground">68/100</span>
-          <span class="text-muted-foreground">Security</span>
-          <span class="text-right text-foreground">90/100</span>
-        </div>
-      </div>
-    </div>
+    </template>
   </div>
+
+  <Dialog :open="showHistory" @update:open="showHistory = false">
+    <DialogContent class="max-w-lg font-mono">
+      <DialogHeader>
+        <DialogTitle class="font-mono">Analysis History</DialogTitle>
+      </DialogHeader>
+
+      <div class="flex flex-col gap-2">
+        <div
+          v-for="(h, i) in allHistory"
+          :key="h.id"
+          class="flex cursor-pointer items-center justify-between border border-border bg-card p-3 hover:bg-accent/30"
+          :class="{ 'border-primary': latestResult?.id === h.id }"
+          @click="latestResult = h; showHistory = false"
+        >
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-muted-foreground">{{ i + 1 }}.</span>
+            <div>
+              <span class="text-xs font-medium text-foreground">{{ h.connection_name }}</span>
+              <span class="ml-2 text-[10px] text-muted-foreground">{{ h.timestamp }}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-muted-foreground">Score: {{ h.score }}/100</span>
+            <button class="text-[10px] text-muted-foreground hover:text-red-500" @click.stop="deleteAnalysis(h.id)">×</button>
+          </div>
+        </div>
+
+        <div v-if="allHistory.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+          No history yet
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
 </template>

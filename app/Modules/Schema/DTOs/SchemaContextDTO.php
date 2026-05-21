@@ -34,4 +34,9 @@ readonly class SchemaContextDTO implements Arrayable
             'summary' => $this->summary,
         ];
     }
+
+    public function toJson(): string
+    {
+        return json_encode($this->toArray());
+    }
 }

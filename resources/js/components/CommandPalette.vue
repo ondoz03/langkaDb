@@ -41,8 +41,12 @@ const items: CommandItem[] = [
 ];
 
 const filteredItems = computed(() => {
-  if (!query.value) return items;
+  if (!query.value) {
+return items;
+}
+
   const q = query.value.toLowerCase();
+
   return items.filter((item) => item.title.toLowerCase().includes(q));
 });
 
