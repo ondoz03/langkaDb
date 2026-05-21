@@ -373,12 +373,24 @@ AetherDB AI menggunakan **minimalist monochrome style** yang terinspirasi dari:
 - Neutral grayscale palette — minimal warna, aksen minimal
 - No glow / no gradient abuse
 
-### Responsive Behavior
+### Single Active Connection Flow
 
-Target utama adalah **developer workstation** dan **ultrawide monitor**. Responsive behavior:
-- Collapsible sidebar
-- Zoomable graph canvas
-- Adaptive panel layout (split pane)
+AetherDB AI menggunakan **single active connection** sebagai state utama:
+
+**Flow:**
+1. User pertama kali buka app → menu sidebar cuma nampilin **Dashboard** dan **Connections**
+2. User tambah koneksi database → tekan **Connect** → koneksi di-test
+3. Kalau sukses → koneksi itu jadi **active**, status berubah jadi `connected`
+4. Otomatis menu **Graph**, **Insights**, **Queries**, **Monitoring** muncul di sidebar
+5. Halaman Graph/Insights/Queries/Monitoring otomatis pakai active connection (gak perlu selector)
+6. User bisa **Disconnect** → active connection hilang, menu kembali collapse
+7. User bisa **Connect** koneksi lain → yang sebelumnya auto disconnect (hanya 1 active)
+
+**Rules:**
+- Maksimal **1 active connection** dalam satu waktu
+- Menu Graph, Insights, Queries, Monitoring **HIDDEN** kalau tidak ada active connection
+- Halaman /graph, /insights, /queries, /monitoring tetap bisa diakses via URL tapi kontennya empty state "No active connection"
+- Tidak ada dropdown/selector DB di halaman Graph — langsung pakai active connection
 
 ---
 

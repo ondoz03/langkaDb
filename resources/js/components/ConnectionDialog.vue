@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
+import { toast } from 'vue-sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -20,7 +21,8 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const { createConnection, updateConnection, loading } = useConnection()
+const { createConnection, updateConnection, testConnection, loading } = useConnection()
+const testing = ref(false)
 
 const form = reactive({
   name: '',
@@ -72,13 +74,54 @@ function resetForm() {
   form.ssh_key = ''
 }
 
+async function handleTest() {
+  testing.value = true
+
+  let id = props.connection?.id as string | undefined
+
+  if (!id) {
+    const result = await createConnection({ ...form })
+
+    if (!result) {
+      testing.value = false
+
+      return
+    }
+
+    id = result.id
+  } else {
+    const data: Record<string, unknown> = { ...form }
+    await updateConnection(id, data)
+  }
+
+  await testConnection(id)
+
+  testing.value = false
+}
+
 async function handleSubmit() {
   const data: Record<string, unknown> = { ...form }
 
-  if (props.connection?.id) {
-    await updateConnection(props.connection.id as string, data)
+  let id = props.connection?.id as string | undefined
+
+  if (id) {
+    await updateConnection(id, data)
   } else {
-    await createConnection(data)
+    const result = await createConnection(data)
+
+    if (!result) {
+      return
+    }
+
+    id = result.id
+  }
+
+  const result = await testConnection(id)
+
+  if (result.success) {
+    toast.success('Connection saved and verified')
+  } else {
+    toast.error(`Saved but connection test failed: ${result.message}`)
   }
 
   resetForm()
@@ -179,11 +222,15 @@ function handleClose() {
         </template>
       </div>
 
-      <DialogFooter>
+      <DialogFooter class="gap-2">
         <Button variant="outline" @click="handleClose">Cancel</Button>
-        <Button :disabled="loading" @click="handleSubmit">
+        <Button :disabled="loading || testing" variant="secondary" @click="handleTest">
+          <Spinner v-if="testing" />
+          Test
+        </Button>
+        <Button :disabled="loading || testing" @click="handleSubmit">
           <Spinner v-if="loading" />
-          {{ connection ? 'Update' : 'Add' }}
+          {{ connection ? 'Update & Verify' : 'Add & Verify' }}
         </Button>
       </DialogFooter>
     </DialogContent>

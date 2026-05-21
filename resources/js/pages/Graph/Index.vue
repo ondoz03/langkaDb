@@ -1,45 +1,28 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3'
 import type { Node } from '@vue-flow/core'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import SchemaGraph from '@/components/graph/SchemaGraph.vue'
 import TableDetailPanel from '@/components/graph/TableDetailPanel.vue'
 import { useGraph } from '@/composables/useGraph'
 import { useConnectionStore } from '@/stores/connection'
-import type { Connection } from '@/stores/connection'
 
 const store = useConnectionStore()
-const { nodes, edges, loading, hoveredNode, selectedNode, loadSchema, onNodeClick, closePanel, onViewportChange } = useGraph()
-const connError = ref<string | null>(null)
+const { nodes, edges, getFilteredNodes, loading, hoveredNode, selectedNode, searchQuery, showOnlyConnected, loadSchema, onNodeClick, closePanel, onViewportChange, rearrange } = useGraph()
+
+const filteredNodes = computed(() => getFilteredNodes())
 
 onMounted(async () => {
-  if (store.connections.length === 0) {
-    try {
-      const res = await fetch('/api/connections')
-      const json = await res.json()
-
-      if (json.data) {
-        store.setConnections(json.data)
-      }
-    } catch {
-      connError.value = 'Failed to load connections'
-
-      return
-    }
-  }
-
-  const conn = store.activeConnection ?? store.connections[0]
-
-  if (conn) {
-    selectConnection(conn)
+  if (store.activeConnection) {
+    await loadSchema(store.activeConnection.id)
   }
 })
 
-async function selectConnection(conn: Connection) {
-  connError.value = null
-  store.setActive(conn.id)
-  await loadSchema(conn.id)
-}
+watch(() => store.activeConnectionId, async (id) => {
+  if (id && store.activeConnection) {
+    await loadSchema(store.activeConnection.id)
+  }
+})
 
 function handleNodeClick(node: Node) {
   onNodeClick(node)
@@ -59,20 +42,9 @@ function handleNodeLeave() {
 
   <div class="flex h-full flex-1 flex-col font-mono">
     <div class="flex items-center justify-between border-b border-border px-4 py-2">
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
         <h2 class="text-sm font-medium text-foreground">Database Graph</h2>
-        <select
-          class="border border-border bg-card px-2 py-1 text-xs text-foreground outline-none"
-          :value="store.activeConnectionId ?? ''"
-          @change="(e) => { const conn = store.connections.find(c => c.id === (e.target as HTMLSelectElement).value); if (conn) selectConnection(conn) }"
-        >
-          <option value="" disabled>Select connection</option>
-          <option
-            v-for="conn in store.connections"
-            :key="conn.id"
-            :value="conn.id"
-          >{{ conn.name }}</option>
-        </select>
+        <span class="text-xs text-muted-foreground">· {{ store.activeConnection?.name }}</span>
       </div>
       <div class="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{{ nodes.length }} tables</span>
@@ -80,17 +52,39 @@ function handleNodeLeave() {
       </div>
     </div>
 
-    <div v-if="connError" class="flex flex-1 items-center justify-center font-mono text-sm text-muted-foreground">
-      {{ connError }}
+    <div class="flex items-center gap-2 border-b border-border px-4 py-1.5">
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Search tables..."
+        class="flex-1 border border-border bg-card px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/50"
+      />
+
+      <button
+        class="border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-accent"
+        :class="{ 'bg-accent': showOnlyConnected }"
+        title="Show only connected tables"
+        @click="showOnlyConnected = !showOnlyConnected"
+      >
+        Connected
+      </button>
+
+      <button
+        class="border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-accent"
+        title="Rearrange layout"
+        @click="rearrange"
+      >
+        Rearrange
+      </button>
     </div>
 
-    <div v-else-if="store.connections.length === 0" class="flex flex-1 items-center justify-center font-mono text-sm text-muted-foreground">
-      No database connections. Add one first.
+    <div v-if="!store.activeConnection" class="flex flex-1 items-center justify-center font-mono text-sm text-muted-foreground">
+      No active connection. Connect to a database first.
     </div>
 
     <div v-else class="flex-1">
       <SchemaGraph
-        :nodes="nodes"
+        :nodes="filteredNodes"
         :edges="edges"
         :loading="loading"
         :hovered-node="hoveredNode"

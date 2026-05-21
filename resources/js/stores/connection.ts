@@ -28,6 +28,8 @@ export const useConnectionStore = defineStore('connection', () => {
     connections.value.find((c) => c.id === activeConnectionId.value) ?? null,
   )
 
+  const hasActiveConnection = computed(() => activeConnection.value !== null && activeConnection.value.status === 'connected')
+
   function setConnections(list: Connection[]) {
     connections.value = list
   }
@@ -54,6 +56,20 @@ export const useConnectionStore = defineStore('connection', () => {
 
   function setActive(id: string | null) {
     activeConnectionId.value = id
+
+    if (id) {
+      localStorage.setItem('active_connection_id', id)
+    } else {
+      localStorage.removeItem('active_connection_id')
+    }
+  }
+
+  function restoreActive() {
+    const saved = localStorage.getItem('active_connection_id')
+
+    if (saved && connections.value.some((c) => c.id === saved)) {
+      activeConnectionId.value = saved
+    }
   }
 
   function setLoading(val: boolean) {
@@ -64,12 +80,14 @@ export const useConnectionStore = defineStore('connection', () => {
     connections,
     activeConnectionId,
     activeConnection,
+    hasActiveConnection,
     loading,
     setConnections,
     addConnection,
     updateConnection,
     removeConnection,
     setActive,
+    restoreActive,
     setLoading,
   }
 })

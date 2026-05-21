@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import {
   Database,
-  GalleryVerticalEnd,
   LayoutDashboard,
-  LineChart,
   MessageSquareText,
   Monitor,
   Search,
   Settings,
   Share2,
 } from 'lucide-vue-next';
+import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -22,19 +21,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useConnectionStore } from '@/stores/connection';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
-  },
-  {
-    title: 'Connections',
-    href: '/connections',
-    icon: Database,
-  },
+const store = useConnectionStore()
+
+const dbNavItems: NavItem[] = [
   {
     title: 'Database Graph',
     href: '/graph',
@@ -56,6 +48,20 @@ const mainNavItems: NavItem[] = [
     icon: Monitor,
   },
 ];
+
+const mainNavItems = computed<NavItem[]>(() => [
+  {
+    title: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    title: 'Connections',
+    href: '/connections',
+    icon: Database,
+  },
+  ...(store.hasActiveConnection ? dbNavItems : []),
+]);
 
 const secondaryNavItems: NavItem[] = [
   {

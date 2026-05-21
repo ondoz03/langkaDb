@@ -4,13 +4,16 @@ import { onMounted, ref } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ConnectionDialog from '@/components/ConnectionDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
 import { useConnection } from '@/composables/useConnection'
+import { useConnectionStore } from '@/stores/connection'
 import type { Connection } from '@/stores/connection'
 
-const { testConnection, deleteConnection, setActive, activeConnectionId } = useConnection()
+const store = useConnectionStore()
+const { deleteConnection, connectConnection, disconnectConnection } = useConnection()
 
-const list = ref<Connection[]>([])
 const loading = ref(true)
+const connecting = ref<string | null>(null)
 
 onMounted(async () => {
   await loadConnections()
@@ -24,7 +27,8 @@ async function loadConnections() {
     const json = await res.json()
 
     if (json.data) {
-      list.value = json.data
+      store.setConnections(json.data)
+      store.restoreActive()
     }
   } catch {
     // silent
@@ -53,6 +57,18 @@ function closeDialog() {
   loadConnections()
 }
 
+async function handleConnect(conn: Connection) {
+  connecting.value = conn.id
+  await connectConnection(conn.id)
+  connecting.value = null
+  loadConnections()
+}
+
+function handleDisconnect() {
+  disconnectConnection()
+  loadConnections()
+}
+
 function handleDelete(conn: Connection) {
   confirmDelete.value = conn
 }
@@ -71,19 +87,8 @@ function cancelDelete() {
   confirmDelete.value = null
 }
 
-async function handleTest(conn: Connection) {
-  await testConnection(conn.id)
-}
-
-function statusBadge(status: string) {
-  switch (status) {
-    case 'connected':
-      return 'bg-green-500/10 text-green-600 dark:text-green-400'
-    case 'error':
-      return 'bg-red-500/10 text-red-600 dark:text-red-400'
-    default:
-      return 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
-  }
+function isActive(conn: Connection) {
+  return store.activeConnectionId === conn.id
 }
 </script>
 
@@ -100,7 +105,7 @@ function statusBadge(status: string) {
       Loading connections...
     </div>
 
-    <div v-else-if="list.length === 0" class="flex flex-1 items-center justify-center">
+    <div v-else-if="store.connections.length === 0" class="flex flex-1 items-center justify-center">
       <div class="text-center">
         <p class="text-muted-foreground">No connections yet</p>
         <p class="mt-1 text-sm text-muted-foreground">Add a database connection to get started</p>
@@ -109,11 +114,10 @@ function statusBadge(status: string) {
 
     <div v-else class="grid gap-3">
       <div
-        v-for="conn in list"
+        v-for="conn in store.connections"
         :key="conn.id"
-        class="flex cursor-pointer items-center justify-between border border-border bg-card p-4 transition-colors hover:bg-accent/50"
-        :class="{ 'border-primary': activeConnectionId === conn.id }"
-        @click="setActive(conn.id)"
+        class="flex items-center justify-between border border-border bg-card p-4"
+        :class="{ 'border-primary': isActive(conn) }"
       >
         <div class="flex items-center gap-3">
           <div class="flex h-8 w-8 items-center justify-center bg-primary/10 font-mono text-xs font-medium text-primary">
@@ -125,16 +129,36 @@ function statusBadge(status: string) {
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <span class="px-2 py-0.5 text-xs font-medium" :class="statusBadge(conn.status)">
-            {{ conn.status }}
-          </span>
-          <Button variant="outline" size="sm" @click.stop="openEdit(conn)">
+          <span
+            v-if="isActive(conn)"
+            class="px-2 py-0.5 text-xs font-medium bg-green-500/10 text-green-600 dark:text-green-400"
+          >connected</span>
+          <span
+            v-else
+            class="px-2 py-0.5 text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-400"
+          >disconnected</span>
+
+          <template v-if="isActive(conn)">
+            <Button variant="outline" size="sm" @click="handleDisconnect">
+              Disconnect
+            </Button>
+          </template>
+          <template v-else>
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="connecting !== null"
+              @click="handleConnect(conn)"
+            >
+              <Spinner v-if="connecting === conn.id" />
+              Connect
+            </Button>
+          </template>
+
+          <Button variant="outline" size="sm" @click="openEdit(conn)">
             Edit
           </Button>
-          <Button variant="outline" size="sm" @click.stop="handleTest(conn)">
-            Test
-          </Button>
-          <Button variant="outline" size="sm" @click.stop="handleDelete(conn)">
+          <Button variant="outline" size="sm" @click="handleDelete(conn)">
             Delete
           </Button>
         </div>

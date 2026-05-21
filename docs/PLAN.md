@@ -252,7 +252,10 @@ npx shadcn-vue@latest add tooltip command popover
 - [x] Global theme tokens configured (light/dark/system via `useAppearance`)
 - [x] App shell layout selesai (AppLayout, SidebarLayout, AuthLayouts, Settings)
 - [x] Auth flow selesai (login/logout/register via Laravel Fortify)
-- [x] Navigation antar halaman berjalan (Dashboard, Connections, Graph, Insights, Queries, Monitoring, Settings)
+- [x] Navigation antar halaman berjalan (Dashboard, Connections, Settings)
+- [x] Sidebar menu Graph/Insights/Queries/Monitoring otomatis muncul/sembunyi berdasarkan active connection
+- [x] Single active connection — Connect/Disconnect, hanya 1 DB aktif dalam satu waktu
+- [x] Halaman Graph tanpa DB selector — langsung pakai active connection
 - [x] Pinia store initialized (connection, schema, ai, ui)
 - [x] Wayfinder auto-route generation configured
 - [x] Pages scaffolded: Dashboard, Connections, Graph, Insights, Queries, Monitoring, Settings (Profile/Security/Appearance)

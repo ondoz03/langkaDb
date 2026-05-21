@@ -59,6 +59,24 @@ export function useGraph() {
   const hoveredNode = ref<string | null>(null)
   const selectedNode = ref<TableData | null>(null)
   const viewport = ref<ViewportTransform>({ x: 0, y: 0, zoom: 0.6 })
+  const searchQuery = ref('')
+  const showOnlyConnected = ref(false)
+
+  function getFilteredNodes() {
+    let result: any[] = [...nodes.value]
+
+    if (searchQuery.value) {
+      const q = searchQuery.value.toLowerCase()
+      result = result.filter((n: any) => (n.data as TableData)?.tableName?.toLowerCase().includes(q))
+    }
+
+    if (showOnlyConnected.value) {
+      const connectedIds = new Set((edges.value as any[]).flatMap((e: any) => [e.source, e.target]))
+      result = result.filter((n: any) => connectedIds.has(n.id))
+    }
+
+    return result as Node[]
+  }
 
   async function loadSchema(connectionId: string) {
     loading.value = true
@@ -146,18 +164,28 @@ export function useGraph() {
     viewport.value = vp
   }
 
+  function rearrange() {
+    if (schema.value) {
+      buildGraph(schema.value)
+    }
+  }
+
   return {
     schema,
     nodes,
     edges,
+    getFilteredNodes,
     loading,
     error,
     hoveredNode,
     selectedNode,
     viewport,
+    searchQuery,
+    showOnlyConnected,
     loadSchema,
     onNodeClick,
     closePanel,
     onViewportChange,
+    rearrange,
   }
 }

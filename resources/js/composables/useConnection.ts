@@ -48,7 +48,13 @@ export function useConnection() {
       if (!res.ok) {
         const text = await res.text()
         let msg = 'Failed to create connection'
-        try { msg = JSON.parse(text).message ?? msg } catch { msg = text || msg }
+
+        try {
+          msg = JSON.parse(text).message ?? msg
+        } catch {
+          msg = text || msg
+        }
+
         throw new Error(msg)
       }
 
@@ -83,7 +89,13 @@ export function useConnection() {
       if (!res.ok) {
         const text = await res.text()
         let msg = 'Failed to update connection'
-        try { msg = JSON.parse(text).message ?? msg } catch { msg = text || msg }
+
+        try {
+          msg = JSON.parse(text).message ?? msg
+        } catch {
+          msg = text || msg
+        }
+
         throw new Error(msg)
       }
 
@@ -117,7 +129,13 @@ export function useConnection() {
       if (!res.ok) {
         const text = await res.text()
         let msg = 'Failed to delete connection'
-        try { msg = JSON.parse(text).message ?? msg } catch { msg = text || msg }
+
+        try {
+          msg = JSON.parse(text).message ?? msg
+        } catch {
+          msg = text || msg
+        }
+
         throw new Error(msg)
       }
 
@@ -164,10 +182,36 @@ export function useConnection() {
     }
   }
 
+  async function connectConnection(id: string) {
+    loading.value = true
+    error.value = null
+
+    try {
+      const result = await testConnection(id)
+
+      if (result.success) {
+        store.setActive(id)
+        toast.success('Connected')
+      } else {
+        toast.error(result.message ?? 'Connection failed')
+      }
+
+      return result
+    } finally {
+      loading.value = false
+    }
+  }
+
+  function disconnectConnection() {
+    store.setActive(null)
+    toast.success('Disconnected')
+  }
+
   return {
     connections: store.connections,
     activeConnection: store.activeConnection,
     activeConnectionId: store.activeConnectionId,
+    hasActiveConnection: store.hasActiveConnection,
     loading,
     error,
     setActive: store.setActive,
@@ -176,5 +220,7 @@ export function useConnection() {
     updateConnection,
     deleteConnection,
     testConnection,
+    connectConnection,
+    disconnectConnection,
   }
 }

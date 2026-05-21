@@ -36,6 +36,7 @@ const emit = defineEmits<{
     </div>
 
     <VueFlow
+      :key="`vf-${nodes.length}`"
       :nodes="nodes"
       :edges="edges"
       :default-viewport="{ x: 0, y: 0, zoom: 0.6 }"
