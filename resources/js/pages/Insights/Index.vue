@@ -143,6 +143,7 @@ function severityColor(s: string) {
         <span>Score: {{ latestResult.score }}/100</span>
         <span>·</span>
         <span>{{ latestResult.timestamp }}</span>
+        <span v-if="(latestResult as any)?.tokens" class="text-muted-foreground">· {{ ((latestResult as any)?.tokens?.total ?? 0).toLocaleString() }} tokens</span>
       </div>
 
       <div class="grid gap-3 md:grid-cols-2">

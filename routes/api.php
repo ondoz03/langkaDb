@@ -2,6 +2,7 @@
 
 use App\Modules\AIAgent\Controllers\AIController;
 use App\Modules\Connection\Controllers\ConnectionController;
+use App\Modules\Connection\Controllers\QueryController;
 use App\Modules\Schema\Controllers\SchemaController;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,7 @@ Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
     Route::get('connections/{id}/schema/tables', [SchemaController::class, 'tables'])->name('api.connections.schema.tables');
     Route::get('connections/{id}/schema/tables/{table}', [SchemaController::class, 'tableDetail'])->name('api.connections.schema.table');
     Route::get('connections/{id}/schema/context', [SchemaController::class, 'context'])->name('api.connections.schema.context');
+    Route::post('connections/{id}/query', [QueryController::class, 'execute'])->name('api.connections.query');
 
     Route::post('connections/{id}/ai/analyze', [AIController::class, 'analyzeSchema'])->name('api.connections.ai.analyze');
     Route::post('connections/{id}/ai/chat', [AIController::class, 'chat'])->name('api.connections.ai.chat');

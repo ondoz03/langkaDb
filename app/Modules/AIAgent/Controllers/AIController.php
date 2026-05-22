@@ -7,6 +7,7 @@ namespace App\Modules\AIAgent\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\AIAgent\Services\AIRouter;
 use App\Modules\Schema\Services\ContextBuilder;
+use App\Modules\Schema\Services\SchemaFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,7 @@ class AIController extends Controller
     public function __construct(
         private readonly AIRouter $router,
         private readonly ContextBuilder $contextBuilder,
+        private readonly SchemaFormatter $formatter,
     ) {}
 
     public function analyzeSchema(string $id, Request $request): JsonResponse
@@ -24,17 +26,21 @@ class AIController extends Controller
         try {
             $context = $this->contextBuilder->build($id, 'database');
 
-            $prompt = <<<PROMPT
-Analyze this database schema. Group tables into domain clusters.
-Rate relationship quality. Identify top 3 structural issues.
+            $schemaCompact = $this->formatter->compact($context);
 
-Schema:
-{$context->toJson()}
+            $prompt = <<<PROMPT
+Analyze this database schema.
+
+{$schemaCompact}
+
+Identify problematic tables and their specific issues.
+For each finding, mention the table name and what's wrong.
+For each recommendation, mention which table to apply it to.
 
 Respond ONLY with JSON:
 {
-  "findings": [{"severity": "high|medium|low", "message": "..."}],
-  "recommendations": [{"priority": "high|medium|low", "message": "..."}],
+  "findings": [{"severity": "high|medium|low", "table": "table_name", "message": "specific issue with this table"}],
+  "recommendations": [{"priority": "high|medium|low", "table": "table_name", "message": "what to do and why"}],
   "score": 0-100
 }
 PROMPT;
@@ -51,6 +57,8 @@ PROMPT;
 
             $parsed = $this->parseAIResponse($response);
             $score = $parsed['score'] ?? 0;
+            $inputTokens = (int) (mb_strlen($prompt) / 4);
+            $outputTokens = (int) (mb_strlen($response) / 4);
 
             DB::table('ai_analyses')->insert([
                 'connection_id' => $id,
@@ -67,6 +75,11 @@ PROMPT;
                     'findings' => $parsed['findings'] ?? [],
                     'recommendations' => $parsed['recommendations'] ?? [],
                     'score' => $score,
+                    'tokens' => [
+                        'input' => $inputTokens,
+                        'output' => $outputTokens,
+                        'total' => $inputTokens + $outputTokens,
+                    ],
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -104,27 +117,11 @@ PROMPT;
     {
         $request->validate(['message' => 'required|string']);
 
-        if ($request->input('stream')) {
-            return $this->chatStream($id, $request);
-        }
-
         try {
-            $context = $this->contextBuilder->build($id, 'database');
             $userMessage = $request->input('message');
-
             $customPrompt = $request->input('system_prompt') ?? '';
             $systemPrompt = $this->buildSystemPrompt($customPrompt);
-            $schemaContext = $context->toJson();
-
-            $prompt = <<<PROMPT
-Connected database schema:
-{$schemaContext}
-
-User question: {$userMessage}
-
-Answer about their database. Only discuss databases, MySQL, NoSQL, Big Data.
-Use markdown for code blocks.
-PROMPT;
+            $prompt = $userMessage;
 
             $response = $this->router->route(
                 'chat',
@@ -133,6 +130,9 @@ PROMPT;
                 $request->input('api_key'),
                 $request->input('provider', 'openai'),
             );
+
+            $inputTokens = (int) (mb_strlen($prompt) / 4);
+            $outputTokens = (int) (mb_strlen($response) / 4);
 
             DB::table('ai_chat_history')->insert([
                 'connection_id' => $id,
@@ -149,6 +149,11 @@ PROMPT;
                     'role' => 'assistant',
                     'content' => $response,
                     'timestamp' => now()->toIso8601String(),
+                    'tokens' => [
+                        'input' => $inputTokens,
+                        'output' => $outputTokens,
+                        'total' => $inputTokens + $outputTokens,
+                    ],
                 ],
             ]);
         } catch (\Throwable $e) {
@@ -258,16 +263,25 @@ PROMPT;
     private function buildSystemPrompt(?string $customPrompt = ''): string
     {
         $default = <<<PROMPT
-You are AetherDB AI, a database expert assistant. You ONLY discuss topics related to:
-- Database management (MySQL, MariaDB, SQLite, PostgreSQL)
-- NoSQL databases (MongoDB, Redis, Elasticsearch)
-- Big data and data engineering
-- Data modeling, schema design, SQL optimization
-- Database performance, indexing, query tuning
+You are a Senior Database Expert with 15+ years of experience in SQL (MySQL, MariaDB, PostgreSQL) and NoSQL (MongoDB, Redis, Cassandra, Elasticsearch).
+When analyzing any schema, query, or architecture:
+1. Identify issues by severity: Critical → Warning → Info
+2. Estimate realistic performance limits with concrete numbers
+3. Give specific, actionable recommendations — never vague advice
+4. Explain trade-offs clearly (e.g., denormalization improves reads but complicates writes)
+5. Compare SQL vs NoSQL when relevant, with clear reasoning
+
+Response format:
+📋 Overview — what this system is, scale assumptions
+⚠️ Issues — critical problems first
+🚀 Optimizations — indexing, caching, query rewrites, partitioning
+📊 Performance estimate — throughput/latency projections
+✅ Quick wins — high-impact changes under 1 hour
 
 RULES:
-- If a question is outside these topics, respond: "I only assist with database-related questions."
-- Be concise and actionable.
+- If a question is outside databases, respond: "Saya hanya dapat membantu pertanyaan terkait database."
+- Always respond in Bahasa Indonesia.
+- Be direct and confident. Use concrete examples and before/after comparisons.
 - Use markdown code blocks for SQL and commands.
 PROMPT;
 

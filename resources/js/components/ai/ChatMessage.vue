@@ -5,10 +5,10 @@ interface Props {
   role: 'user' | 'assistant'
   content: string
   timestamp?: string
+  tokens?: { input: number; output: number; total: number }
 }
 
 const props = defineProps<Props>()
-const copied = ref(false)
 const sqlCopied = ref(false)
 
 const sqlBlocks = computed(() => {
@@ -22,15 +22,6 @@ const sqlBlocks = computed(() => {
 
   return blocks
 })
-
-function copyAll() {
-  navigator.clipboard.writeText(props.content)
-  copied.value = true
-
-  setTimeout(() => {
-    copied.value = false
-  }, 1500)
-}
 
 function copySQL(sql: string) {
   navigator.clipboard.writeText(sql)
@@ -51,13 +42,27 @@ function copySQL(sql: string) {
 
     <div class="flex max-w-[80%] flex-col gap-1">
       <div class="border border-border px-3 py-2 text-xs font-mono whitespace-pre-wrap" :class="role === 'user' ? 'bg-primary/5' : 'bg-card'">
-        <div class="mb-1 flex justify-end gap-2">
-          <button v-if="role === 'assistant' && sqlBlocks.length > 0" class="text-[10px] text-blue-500 hover:text-blue-400" @click="copySQL(sqlBlocks[0])">{{ sqlCopied ? 'SQL Copied!' : 'Copy SQL' }}</button>
-          <button class="text-[10px] text-muted-foreground hover:text-foreground" @click="copyAll">{{ copied ? 'Copied!' : 'Copy all' }}</button>
+        <div v-if="role === 'assistant' && sqlBlocks.length > 0" class="mb-1 flex justify-end">
+          <button
+            class="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-blue-500"
+            :title="sqlCopied ? 'Copied!' : 'Copy SQL'"
+            @click="copySQL(sqlBlocks[0])"
+          >
+            <span v-if="sqlCopied">✓</span>
+            <span v-else>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+            </span>
+          </button>
         </div>
         <div v-text="content" />
       </div>
-      <span v-if="timestamp" class="text-[10px] text-muted-foreground/50">{{ timestamp }}</span>
+      <div class="flex items-center gap-2">
+        <span v-if="timestamp" class="text-[10px] text-muted-foreground/50">{{ timestamp }}</span>
+        <span v-if="tokens" class="text-[10px] text-muted-foreground/50">· {{ tokens.total.toLocaleString() }} tokens</span>
+      </div>
     </div>
   </div>
 </template>
