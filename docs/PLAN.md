@@ -2,7 +2,7 @@
 ## Development Execution Plan
 
 **Version:** 1.0.0  
-**Status:** Phase 4 ✅ (AI Engine) — Frontend selesai, backend AI agent berjalan  
+**Status:** Phase 4 ✅ (AI Engine) — Insight analysis, Query execution, AI Chat floating  
 **Project:** AetherDB AI — AI-Powered Database Intelligence Desktop App  
 **Stack:** Laravel 13 + Vue 3 + Inertia.js + Tauri v2 + AI Multi-Agent  
 **Last Updated:** 2026-05-21
@@ -656,15 +656,15 @@ ORDER BY sum_timer_wait DESC LIMIT 50;
 
 - [x] AIRouter.php routing ke model (OpenAI, DeepSeek, Anthropic + rule-based fallback)
 - [x] SchemaAgent.php selesai (domain clustering, quality score)
-- [x] AI Chat streaming (SSE via Laravel stream response)
-- [x] AI Insights page — analyze button + history (tersimpan di DB)
-- [x] Query Analyzer — AI Assistant panel + chat history + Copy SQL + Apply SQL
-- [x] Settings AI — provider config (API key), model selector, system prompt custom
+- [x] AI Chat — floating icon bottom-right + resizable panel (drag width)
+- [x] AI Insights — findings mention table names + solutions
+- [x] Query Analyzer — connected ke DB (execute real SQL) + error handling
+- [x] Chat history disimpan di DB (ai_chat_history table)
+- [x] Token usage display (per chat & analysis)
+- [x] Schema compact formatter (tokopedia hemat 6x dari JSON)
+- [x] Settings AI — provider config, model selector, system prompt custom
 - [x] Single active connection flow — sidebar menu muncul/sembunyi
-- [x] DeepSeek, OpenAI, Anthropic integration (via curl, OpenAI-compatible API)
-- [ ] DocumentationAgent.php selesai (markdown doc generation)
-- [ ] AI Chat endpoint selesai dengan streaming support
-- [ ] Chat UI komponen selesai (AIChatPanel.vue)
+- [x] DeepSeek, OpenAI, Anthropic integration
 - [ ] Health scoring algorithm implemented
 - [ ] Health dashboard widgets selesai
 - [ ] Slow query reader dari performance_schema

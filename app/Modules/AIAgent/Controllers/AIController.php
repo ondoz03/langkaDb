@@ -119,27 +119,82 @@ PROMPT;
 
         try {
             $userMessage = $request->input('message');
+            $history = $request->input('history', []);
             $customPrompt = $request->input('system_prompt') ?? '';
             $systemPrompt = $this->buildSystemPrompt($customPrompt);
-            $prompt = $userMessage;
+            $apiKey = $request->input('api_key') ?? env('OPENAI_API_KEY') ?? '';
+            $provider = $request->input('provider', 'openai');
 
-            $response = $this->router->route(
-                'chat',
-                $prompt,
-                $systemPrompt,
-                $request->input('api_key'),
-                $request->input('provider', 'openai'),
-            );
+            $connection = \App\Modules\Connection\Models\Connection::find($id);
+            $dbInfo = '';
 
-            $inputTokens = (int) (mb_strlen($prompt) / 4);
-            $outputTokens = (int) (mb_strlen($response) / 4);
+            if ($connection) {
+                $dbInfo = "Terhubung ke: {$connection->name} ({$connection->driver})";
+
+                try {
+                    $context = $this->contextBuilder->build($id, 'database');
+                    $schemaLines = [];
+
+                    $allTableNames = array_map(fn ($t) => $t->name, $context->tables);
+
+                    // Show ALL table names (cheap - just names)
+                    $dbInfo .= "\nSemua tabel: " . implode(', ', $allTableNames);
+
+                    // Column details for first 15 tables only
+                    $detailTables = array_slice($context->tables, 0, 15);
+                    $dbInfo .= "\n\nDetail kolom:";
+
+                    foreach ($detailTables as $table) {
+                        $colNames = [];
+                        foreach ($table->columns as $col) {
+                            $colNames[] = $col->name;
+                        }
+                        $dbInfo .= "\n- {$table->name}(" . implode(', ', $colNames) . ')';
+                    }
+
+                    if (count($context->tables) > 15) {
+                        $dbInfo .= "\n(Gunakan [QUERY]SHOW COLUMNS FROM nama_tabel[/QUERY] untuk lihat kolom tabel lain)";
+                    }
+                } catch (\Throwable $e) {
+                    $dbInfo .= "\n(Gunakan [QUERY]SHOW TABLES[/QUERY] untuk lihat tabel)";
+                }
+            }
+
+            // Build messages array with history
+            $aiMessages = [['role' => 'system', 'content' => $systemPrompt]];
+
+            if ($dbInfo) {
+                $aiMessages[] = ['role' => 'system', 'content' => $dbInfo];
+            }
+
+            // Add conversation history (last 10 messages, keep it relevant)
+            $recentHistory = array_slice($history, -10);
+            foreach ($recentHistory as $msg) {
+                $content = $msg['content'] ?? '';
+                if (mb_strlen($content) > 500) {
+                    $content = mb_substr($content, 0, 500) . '...';
+                }
+                $aiMessages[] = [
+                    'role' => $msg['role'] ?? 'user',
+                    'content' => $content,
+                ];
+            }
+
+            // Add current user message
+            $aiMessages[] = ['role' => 'user', 'content' => $userMessage];
+
+            $response = $this->router->routeMessages('chat', $aiMessages, $apiKey, $provider);
+            $finalResponse = $this->processToolCalls($response, $id, $systemPrompt, $apiKey, $provider);
+
+            $inputTokens = (int) (mb_strlen(json_encode($aiMessages)) / 4);
+            $outputTokens = (int) (mb_strlen($finalResponse) / 4);
 
             DB::table('ai_chat_history')->insert([
                 'connection_id' => $id,
                 'connection_name' => $request->input('connection_name', 'Unknown'),
-                'provider' => $request->input('provider', 'openai'),
+                'provider' => $provider,
                 'user_message' => $userMessage,
-                'ai_response' => $response,
+                'ai_response' => $finalResponse,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -147,7 +202,7 @@ PROMPT;
             return response()->json([
                 'data' => [
                     'role' => 'assistant',
-                    'content' => $response,
+                    'content' => $finalResponse,
                     'timestamp' => now()->toIso8601String(),
                     'tokens' => [
                         'input' => $inputTokens,
@@ -159,6 +214,72 @@ PROMPT;
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }
+    }
+
+    private function processToolCalls(string $response, string $connectionId, string $systemPrompt, string $apiKey, string $provider): string
+    {
+        if (!preg_match('/\[QUERY\]([\s\S]*?)\[\/QUERY\]/', $response, $matches)) {
+            return $response;
+        }
+
+        $sql = trim($matches[1]);
+        $sqlUpper = strtoupper($sql);
+        $textBefore = explode('[QUERY]', $response)[0];
+        $sqlBlock = "```sql\n{$sql}\n```";
+
+        // Only auto-execute read-only queries
+        $readOnlyPrefixes = ['SELECT', 'SHOW', 'DESCRIBE', 'EXPLAIN', 'WITH', 'DESC'];
+        $isReadOnly = false;
+
+        foreach ($readOnlyPrefixes as $prefix) {
+            if (str_starts_with($sqlUpper, $prefix)) {
+                $isReadOnly = true;
+                break;
+            }
+        }
+
+        if (!$isReadOnly) {
+            return $textBefore . "\n\n{$sqlBlock}\n\n⚠️ *Query ini tidak dijalankan otomatis. Jalankan manual jika yakin.*";
+        }
+
+        $connection = \App\Modules\Connection\Models\Connection::find($connectionId);
+
+        if (!$connection) {
+            return $textBefore . "\n\n{$sqlBlock}\n\n*(Koneksi tidak ditemukan)*";
+        }
+
+        $driverMap = ['mysql' => 'pdo_mysql', 'mariadb' => 'pdo_mysql'];
+        $encryptor = app(\App\Modules\Connection\Services\ConnectionEncryptor::class);
+
+        $config = [
+            'driver' => $driverMap[$connection->driver] ?? 'pdo_mysql',
+            'host' => $connection->host,
+            'port' => (int) $connection->port,
+            'dbname' => $connection->database,
+            'user' => $connection->username,
+            'password' => $encryptor->decrypt($connection->password),
+            'charset' => 'utf8mb4',
+        ];
+
+        try {
+            $conn = \Doctrine\DBAL\DriverManager::getConnection($config);
+            $stmt = $conn->executeQuery($sql);
+            $rows = $stmt->fetchAllAssociative();
+            $columns = !empty($rows) ? array_keys($rows[0]) : [];
+            $count = count($rows);
+            $displayRows = array_slice($rows, 0, 15);
+
+            $header = '| ' . implode(' | ', $columns) . ' |';
+            $separator = '| ' . implode(' | ', array_fill(0, count($columns), '---')) . ' |';
+            $dataRows = array_map(fn ($row) => '| ' . implode(' | ', array_map(fn ($col) => $row[$col] ?? 'NULL', $columns)) . ' |', $displayRows);
+            $table = "[Hasil: {$count} baris]\n\n{$header}\n{$separator}\n" . implode("\n", $dataRows);
+
+            $resultBlock = "```\n{$table}\n```";
+        } catch (\Throwable $e) {
+            $resultBlock = "```\nError: {$e->getMessage()}\n```";
+        }
+
+        return $textBefore . "\n\n{$sqlBlock}\n\n{$resultBlock}";
     }
 
     public function listChatHistory(string $id): JsonResponse
@@ -263,26 +384,17 @@ PROMPT;
     private function buildSystemPrompt(?string $customPrompt = ''): string
     {
         $default = <<<PROMPT
-You are a Senior Database Expert with 15+ years of experience in SQL (MySQL, MariaDB, PostgreSQL) and NoSQL (MongoDB, Redis, Cassandra, Elasticsearch).
-When analyzing any schema, query, or architecture:
-1. Identify issues by severity: Critical → Warning → Info
-2. Estimate realistic performance limits with concrete numbers
-3. Give specific, actionable recommendations — never vague advice
-4. Explain trade-offs clearly (e.g., denormalization improves reads but complicates writes)
-5. Compare SQL vs NoSQL when relevant, with clear reasoning
+Kamu adalah database expert. Jawab dalam Bahasa Indonesia.
 
-Response format:
-📋 Overview — what this system is, scale assumptions
-⚠️ Issues — critical problems first
-🚀 Optimizations — indexing, caching, query rewrites, partitioning
-📊 Performance estimate — throughput/latency projections
-✅ Quick wins — high-impact changes under 1 hour
+Kamu adalah database expert. Jawab dalam Bahasa Indonesia.
 
-RULES:
-- If a question is outside databases, respond: "Saya hanya dapat membantu pertanyaan terkait database."
-- Always respond in Bahasa Indonesia.
-- Be direct and confident. Use concrete examples and before/after comparisons.
-- Use markdown code blocks for SQL and commands.
+PERHATIKAN KONTEKS PERCAKAPAN SEBELUMNYA.
+
+Untuk menampilkan data/analisis:
+- Gunakan [QUERY]SQL[/QUERY] — otomatis dijalankan, hasil langsung tampil.
+- Contoh: [QUERY]SELECT * FROM users LIMIT 5[/QUERY]
+- HANYA untuk SELECT, SHOW, DESCRIBE, EXPLAIN, WITH.
+- Query lain (INSERT, UPDATE, DELETE, ALTER, DROP) TIDAK boleh disarankan sama sekali.
 PROMPT;
 
         if (trim($customPrompt)) {

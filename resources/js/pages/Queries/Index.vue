@@ -17,7 +17,52 @@ const error = ref<string | null>(null)
 
 // Chat
 interface ChatMsg { role: 'user' | 'assistant'; content: string; timestamp: string; tokens?: { input: number; output: number; total: number } }
-const messages = ref<ChatMsg[]>([])
+
+interface ChatSession {
+  id: string
+  name: string
+  messages: ChatMsg[]
+  createdAt: string
+}
+
+const SESSIONS_KEY = 'chat_sessions'
+const ACTIVE_KEY = 'chat_active_session'
+
+function loadSessions(): ChatSession[] {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSIONS_KEY) ?? '[]')
+  } catch {
+    return []
+  }
+}
+
+function saveSessions() {
+  const sessions = loadSessions()
+  const existing = sessions.findIndex(s => s.id === activeSession.value)
+
+  if (existing >= 0) {
+    sessions[existing].messages = messages.value.slice(-100)
+  } else {
+    sessions.unshift({
+      id: activeSession.value,
+      name: `Chat ${new Date().toLocaleTimeString()}`,
+      messages: messages.value.slice(-100),
+      createdAt: new Date().toISOString(),
+    })
+  }
+
+  sessionStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions.slice(-20)))
+}
+
+function loadSession(id: string): ChatMsg[] {
+  const sessions = loadSessions()
+  const s = sessions.find(s => s.id === id)
+
+  return s?.messages ?? []
+}
+
+const activeSession = ref(sessionStorage.getItem(ACTIVE_KEY) ?? Date.now().toString())
+const messages = ref<ChatMsg[]>(loadSession(activeSession.value))
 const input = ref('')
 const thinking = ref(false)
 const showChat = ref(false)
@@ -26,6 +71,42 @@ const resizing = ref(false)
 
 const defaultModelId = ref(localStorage.getItem('aetherdb_default_model') ?? 'deepseek-v4-flash')
 const currentProvider = ref(getProviderFromModel(defaultModelId.value))
+
+function newSession() {
+  saveSessions()
+  activeSession.value = Date.now().toString()
+  sessionStorage.setItem(ACTIVE_KEY, activeSession.value)
+  messages.value = []
+  saveSessions()
+}
+
+async function loadInsights() {
+  if (!store.activeConnection || thinking.value) {
+    return
+  }
+
+  try {
+    const res = await fetch('/api/ai/analyses')
+    const json = await res.json()
+    const latest = json.data?.[0]
+
+    if (!latest) {
+      messages.value.push({ role: 'assistant', content: 'Belum ada分析. Buka AI Insights dulu.', timestamp: new Date().toISOString() })
+
+      return
+    }
+
+    const findings = (latest.result?.findings ?? []).map((f: any) => `- [${f.severity}] ${f.table ? f.table + ': ' : ''}${f.message}`).join('\n')
+    const recommendations = (latest.result?.recommendations ?? []).map((r: any) => `- [${r.priority}] ${r.table ? r.table + ': ' : ''}${r.message}`).join('\n')
+
+    const msg = `📋 Hasil Analisis Terakhir:\n\n⚠️ Temuan:\n${findings}\n\n🚀 Rekomendasi:\n${recommendations}\n\nSkor: ${latest.score}/100\n\nGunakan ini sebagai konteks untuk menjawab pertanyaan saya selanjutnya.`
+    messages.value.push({ role: 'user', content: 'Load hasil analisis terakhir', timestamp: new Date().toISOString() })
+    messages.value.push({ role: 'assistant', content: msg, timestamp: new Date().toISOString() })
+    saveSessions()
+  } catch {
+    messages.value.push({ role: 'assistant', content: 'Gagal mengambil analisis.', timestamp: new Date().toISOString() })
+  }
+}
 
 function getProviderFromModel(modelId: string): string {
   return MODELS.find(m => m.id === modelId)?.provider ?? 'openai'
@@ -85,12 +166,23 @@ async function sendChat() {
   const idx = messages.value.length
   messages.value.push({ role: 'assistant', content: '', timestamp: new Date().toISOString() })
 
+  const modelId = localStorage.getItem('aetherdb_default_model') ?? 'deepseek-v4-flash'
+  const provider = getProviderFromModel(modelId)
+  const apiKey = getKey(provider as ProviderId) ?? ''
+  const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
+
+  // Build history from current messages (exclude the empty placeholder)
+  const history = messages.value.slice(0, idx).map(m => ({ role: m.role, content: m.content }))
+
   try {
-    const modelId = localStorage.getItem('aetherdb_default_model') ?? 'deepseek-v4-flash'
-    const provider = getProviderFromModel(modelId)
-    const apiKey = getKey(provider as ProviderId) ?? ''
-    const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
-    const body = JSON.stringify({ message: msg, api_key: apiKey, provider, system_prompt: systemPrompt, connection_name: store.activeConnection.name })
+    const body = JSON.stringify({
+      message: msg,
+      history,
+      api_key: apiKey,
+      provider,
+      system_prompt: systemPrompt,
+      connection_name: store.activeConnection.name,
+    })
 
     const res = await fetch(`/api/connections/${store.activeConnection.id}/ai/chat`, {
       method: 'POST', credentials: 'include',
@@ -99,11 +191,16 @@ async function sendChat() {
 
     const json = await res.json()
 
-    if (json.data) {
-      messages.value[idx] = json.data as ChatMsg
-    } else {
-      messages.value[idx] = { role: 'assistant', content: json.message ?? 'No response', timestamp: new Date().toISOString() }
-    }
+    const aiContent = json.data?.content ?? json.message ?? 'No response'
+
+    messages.value[idx] = {
+      role: 'assistant',
+      content: aiContent,
+      timestamp: new Date().toISOString(),
+      tokens: json.data?.tokens,
+    } as ChatMsg
+
+    saveSessions()
   } catch {
     messages.value[idx] = { role: 'assistant', content: 'Failed', timestamp: new Date().toISOString() }
   } finally {
@@ -111,18 +208,31 @@ async function sendChat() {
   }
 }
 
-function extractSQL(text: string): string {
-  const match = text.match(/```(?:sql|mysql)?\s*([\s\S]*?)```/)
+const showHistory = ref(false)
+const chatHistory = ref<{ id: number; user_message: string; ai_response: string }[]>([])
 
-  return match ? match[1].trim() : text
+async function loadHistory() {
+  if (!store.activeConnection) {
+    return
+  }
+
+  try {
+    const res = await fetch(`/api/connections/${store.activeConnection.id}/ai/chat-history`)
+    const json = await res.json()
+    chatHistory.value = json.data ?? []
+    showHistory.value = true
+  } catch { /* silent */ }
 }
 
-function applySQL(sqlText: string) {
-  sql.value = extractSQL(sqlText)
+function openHistoryItem(h: { user_message: string; ai_response: string }) {
+  messages.value.push({ role: 'user' as const, content: h.user_message, timestamp: '' })
+  messages.value.push({ role: 'assistant' as const, content: h.ai_response, timestamp: '' })
+  showHistory.value = false
+  saveSessions()
 }
 
-function hasSQL(text: string): boolean {
-  return /```(?:sql|mysql)/.test(text)
+function clearChat() {
+  newSession()
 }
 
 // Resize
@@ -217,25 +327,25 @@ function startResize(e: MouseEvent) {
       />
 
       <div class="flex items-center justify-between border-b border-border px-3 py-2">
+        <div class="flex items-center gap-1">
+          <button class="p-1 text-muted-foreground hover:text-foreground" @click="loadHistory" title="History">📋</button>
+          <button class="p-1 text-muted-foreground hover:text-foreground" @click="loadInsights" :disabled="thinking" title="Load Insights">📊</button>
+          <button class="p-1 text-muted-foreground hover:text-foreground" @click="clearChat" title="Clear chat">🗑</button>
+        </div>
         <div class="flex items-center gap-2">
-          <select class="border border-border bg-card px-1.5 py-1 text-[10px] text-foreground outline-none w-24" :value="defaultModelId" @change="(e) => changeModel((e.target as HTMLSelectElement).value)">
+          <select class="border border-border bg-card px-1.5 py-1 text-[10px] text-foreground outline-none w-36" :value="defaultModelId" @change="(e) => changeModel((e.target as HTMLSelectElement).value)">
             <optgroup v-for="p in PROVIDERS" :key="p.id" :label="p.label">
               <option v-for="m in getModelsForProvider(p.id)" :key="m.id" :value="m.id">{{ m.label }}</option>
             </optgroup>
           </select>
+          <button class="text-xs text-muted-foreground hover:text-foreground" @click="showChat = false">✕</button>
         </div>
-        <button class="text-xs text-muted-foreground hover:text-foreground" @click="showChat = false">✕</button>
       </div>
 
       <div class="flex-1 overflow-y-auto divide-y divide-border">
         <div v-if="messages.length === 0 && !thinking" class="flex h-full items-center justify-center px-4 text-center text-[10px] text-muted-foreground">Ask the AI to help write or optimize SQL queries</div>
 
-        <div v-for="(msg, i) in messages" :key="i">
-          <ChatMessage :role="msg.role" :content="msg.content" :timestamp="msg.timestamp" :tokens="msg.tokens" />
-          <div v-if="msg.role === 'assistant' && hasSQL(msg.content)" class="flex gap-1 px-4 pb-2">
-            <button class="text-[10px] text-blue-500 hover:text-blue-400" @click="applySQL(msg.content)">Apply SQL</button>
-          </div>
-        </div>
+        <ChatMessage v-for="(msg, i) in messages" :key="i" :role="msg.role" :content="msg.content" :timestamp="msg.timestamp" :tokens="msg.tokens" />
 
         <div v-if="thinking" class="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
           <Spinner /> Thinking...
@@ -247,6 +357,23 @@ function startResize(e: MouseEvent) {
           <input v-model="input" type="text" placeholder="Ask about SQL..." class="flex-1 border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none font-mono" :disabled="!store.activeConnection || thinking" @keydown.enter="sendChat" />
           <Button size="sm" :disabled="!input.trim() || thinking || !store.activeConnection" @click="sendChat">Send</Button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Dialog -->
+  <div v-if="showHistory" class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-16" @click.self="showHistory = false">
+    <div class="w-[500px] max-h-[60vh] border border-border bg-card shadow-xl overflow-y-auto font-mono">
+      <div class="flex items-center justify-between border-b border-border px-4 py-2">
+        <span class="text-xs font-medium text-foreground">Chat History</span>
+        <button class="text-xs text-muted-foreground hover:text-foreground" @click="showHistory = false">✕</button>
+      </div>
+      <div class="divide-y divide-border">
+        <div v-for="h in chatHistory" :key="h.id" class="cursor-pointer px-4 py-3 hover:bg-accent/30" @click="openHistoryItem(h)">
+          <p class="text-xs text-foreground truncate">{{ h.user_message }}</p>
+          <p class="text-[10px] text-muted-foreground mt-0.5 truncate">{{ h.ai_response?.slice(0, 100) }}...</p>
+        </div>
+        <div v-if="chatHistory.length === 0" class="px-4 py-8 text-center text-xs text-muted-foreground">No history yet</div>
       </div>
     </div>
   </div>
