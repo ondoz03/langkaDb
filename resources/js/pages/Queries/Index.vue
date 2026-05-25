@@ -231,6 +231,20 @@ function openHistoryItem(h: { user_message: string; ai_response: string }) {
   saveSessions()
 }
 
+async function deleteHistoryItem(id: number) {
+  await fetch(`/api/ai/chat-history/${id}`, { method: 'DELETE' })
+  chatHistory.value = chatHistory.value.filter(h => h.id !== id)
+}
+
+async function clearAllHistory() {
+  if (!store.activeConnection) {
+    return
+  }
+
+  await fetch(`/api/connections/${store.activeConnection.id}/ai/chat-history`, { method: 'DELETE' })
+  chatHistory.value = []
+}
+
 function clearChat() {
   newSession()
 }
@@ -365,13 +379,19 @@ function startResize(e: MouseEvent) {
   <div v-if="showHistory" class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-16" @click.self="showHistory = false">
     <div class="w-[500px] max-h-[60vh] border border-border bg-card shadow-xl overflow-y-auto font-mono">
       <div class="flex items-center justify-between border-b border-border px-4 py-2">
-        <span class="text-xs font-medium text-foreground">Chat History</span>
-        <button class="text-xs text-muted-foreground hover:text-foreground" @click="showHistory = false">✕</button>
+        <span class="text-xs font-medium text-foreground">Chat History ({{ chatHistory.length }})</span>
+        <div class="flex items-center gap-2">
+          <button v-if="chatHistory.length > 0" class="text-[10px] text-red-500 hover:text-red-400" @click="clearAllHistory">Delete All</button>
+          <button class="text-xs text-muted-foreground hover:text-foreground" @click="showHistory = false">✕</button>
+        </div>
       </div>
       <div class="divide-y divide-border">
-        <div v-for="h in chatHistory" :key="h.id" class="cursor-pointer px-4 py-3 hover:bg-accent/30" @click="openHistoryItem(h)">
-          <p class="text-xs text-foreground truncate">{{ h.user_message }}</p>
-          <p class="text-[10px] text-muted-foreground mt-0.5 truncate">{{ h.ai_response?.slice(0, 100) }}...</p>
+        <div v-for="h in chatHistory" :key="h.id" class="flex items-center px-4 py-3 hover:bg-accent/30 group">
+          <div class="flex-1 cursor-pointer min-w-0" @click="openHistoryItem(h)">
+            <p class="text-xs text-foreground truncate">{{ h.user_message }}</p>
+            <p class="text-[10px] text-muted-foreground mt-0.5 truncate">{{ h.ai_response?.slice(0, 100) }}...</p>
+          </div>
+          <button class="ml-2 text-[10px] text-red-500 hover:text-red-400 opacity-0 group-hover:opacity-100 shrink-0" @click.stop="deleteHistoryItem(h.id)">×</button>
         </div>
         <div v-if="chatHistory.length === 0" class="px-4 py-8 text-center text-xs text-muted-foreground">No history yet</div>
       </div>

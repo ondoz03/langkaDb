@@ -301,6 +301,20 @@ PROMPT;
         return response()->json(['data' => $items]);
     }
 
+    public function deleteChatHistory(int $id): JsonResponse
+    {
+        DB::table('ai_chat_history')->where('id', $id)->delete();
+
+        return response()->json(['message' => 'Deleted']);
+    }
+
+    public function clearChatHistory(string $id): JsonResponse
+    {
+        DB::table('ai_chat_history')->where('connection_id', $id)->delete();
+
+        return response()->json(['message' => 'Cleared']);
+    }
+
     private function chatStream(string $id, Request $request): StreamedResponse
     {
         $context = $this->contextBuilder->build($id, 'database');

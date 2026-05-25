@@ -23,6 +23,8 @@ Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
     Route::post('connections/{id}/ai/analyze', [AIController::class, 'analyzeSchema'])->name('api.connections.ai.analyze');
     Route::post('connections/{id}/ai/chat', [AIController::class, 'chat'])->name('api.connections.ai.chat');
     Route::get('connections/{id}/ai/chat-history', [AIController::class, 'listChatHistory'])->name('api.connections.ai.chat-history');
+    Route::delete('ai/chat-history/{id}', [AIController::class, 'deleteChatHistory'])->name('api.ai.chat-history.delete');
+    Route::delete('connections/{id}/ai/chat-history', [AIController::class, 'clearChatHistory'])->name('api.connections.ai.chat-history.clear');
     Route::get('ai/analyses', [AIController::class, 'listAnalyses'])->name('api.ai.analyses');
     Route::delete('ai/analyses/{id}', [AIController::class, 'deleteAnalysis'])->name('api.ai.analyses.delete');
 });
