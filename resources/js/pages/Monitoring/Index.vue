@@ -47,7 +47,7 @@ function dbStatusColor(s: string) {
       <div
         v-for="s in stats"
         :key="s.label"
-        class="border border-border bg-card p-4"
+        class="rounded-lg border border-border bg-card p-4"
       >
         <p class="text-xs text-muted-foreground">{{ s.label }}</p>
         <p class="mt-1 text-xl font-bold text-foreground">{{ s.value }}</p>
@@ -55,7 +55,7 @@ function dbStatusColor(s: string) {
       </div>
     </div>
 
-    <div class="border border-border bg-card p-4">
+    <div class="rounded-lg border border-border bg-card p-4">
       <h3 class="text-sm font-medium text-foreground">Database Status</h3>
       <div class="mt-3 divide-y divide-border text-xs">
         <div
@@ -64,7 +64,7 @@ function dbStatusColor(s: string) {
           class="flex items-center justify-between py-2"
         >
           <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center bg-primary/10 font-mono text-xs font-medium text-primary">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-brand/10 font-mono text-xs font-medium text-accent-brand">
               {{ db.name.charAt(0).toUpperCase() }}
             </div>
             <div>
@@ -80,13 +80,13 @@ function dbStatusColor(s: string) {
     </div>
 
     <div class="grid gap-3 md:grid-cols-2">
-      <div class="border border-border bg-card p-4">
+      <div class="rounded-lg border border-border bg-card p-4">
         <h3 class="text-sm font-medium text-foreground">Queries Over Time</h3>
         <div class="mt-3 flex items-end gap-1" style="height: 100px">
           <div
             v-for="(h, i) in [40, 65, 45, 80, 55, 70, 90, 60, 75, 50, 85, 95, 70, 55, 80, 60, 75, 90, 65, 50, 85, 70, 95, 80]"
             :key="i"
-            class="flex-1 bg-primary/20 hover:bg-primary/40"
+            class="flex-1 rounded-sm bg-accent-brand/20 hover:bg-accent-brand/40"
             :style="{ height: h + '%' }"
           />
         </div>
@@ -96,7 +96,7 @@ function dbStatusColor(s: string) {
           <span>23:59</span>
         </div>
       </div>
-      <div class="border border-border bg-card p-4">
+      <div class="rounded-lg border border-border bg-card p-4">
         <h3 class="text-sm font-medium text-foreground">Recent Alerts</h3>
         <div class="mt-3 divide-y divide-border text-xs">
           <div class="flex items-start gap-3 py-2">

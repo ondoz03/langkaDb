@@ -78,6 +78,7 @@ const inputEmail = ref(props.email);
 
             <Button
                 type="submit"
+                variant="accent"
                 class="mt-4 w-full"
                 :disabled="processing"
                 data-test="reset-password-button"

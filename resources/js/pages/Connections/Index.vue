@@ -120,7 +120,7 @@ function isActive(conn: Connection) {
         :class="{ 'border-primary': isActive(conn) }"
       >
         <div class="flex items-center gap-3">
-          <div class="flex h-8 w-8 items-center justify-center bg-primary/10 font-mono text-xs font-medium text-primary">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-brand/10 font-mono text-xs font-medium text-accent-brand">
             {{ conn.name.charAt(0).toUpperCase() }}
           </div>
           <div>

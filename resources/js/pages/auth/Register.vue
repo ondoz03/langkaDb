@@ -91,6 +91,7 @@ defineOptions({
 
             <Button
                 type="submit"
+                variant="accent"
                 class="mt-2 w-full"
                 tabindex="5"
                 :disabled="processing"

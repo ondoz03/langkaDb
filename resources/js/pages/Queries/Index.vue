@@ -290,7 +290,7 @@ function startResize(e: MouseEvent) {
             </Button>
           </div>
         </div>
-        <textarea v-model="sql" class="h-28 resize-none border border-border bg-card p-3 text-xs text-foreground outline-none font-mono" placeholder="Enter SQL query..." spellcheck="false" />
+        <textarea v-model="sql" class="h-28 resize-none rounded-lg border border-border bg-card p-3 text-xs text-foreground outline-none font-mono focus:border-accent-brand/50 focus:ring-1 focus:ring-accent-brand/20 transition-colors" placeholder="Enter SQL query..." spellcheck="false" />
       </div>
 
       <div v-if="running" class="flex items-center justify-center py-8 text-xs text-muted-foreground">Executing...</div>
@@ -323,7 +323,7 @@ function startResize(e: MouseEvent) {
     <!-- Floating Chat Button -->
     <button
       v-if="store.activeConnection"
-      class="fixed bottom-4 right-4 z-50 flex h-10 w-10 items-center justify-center border border-border bg-card text-sm text-foreground shadow-lg hover:bg-accent"
+      class="fixed bottom-4 right-4 z-50 flex h-10 w-10 items-center justify-center rounded-xl bg-accent-brand text-sm font-medium text-accent-brand-foreground shadow-lg hover:opacity-90"
       @click="showChat = !showChat"
     >AI</button>
 
@@ -368,7 +368,7 @@ function startResize(e: MouseEvent) {
 
       <div class="border-t border-border p-2">
         <div class="flex gap-2">
-          <input v-model="input" type="text" placeholder="Ask about SQL..." class="flex-1 border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none font-mono" :disabled="!store.activeConnection || thinking" @keydown.enter="sendChat" />
+          <input v-model="input" type="text" placeholder="Ask about SQL..." class="flex-1 rounded-lg border border-border bg-card px-2 py-1.5 text-xs text-foreground outline-none font-mono focus:border-accent-brand/50 focus:ring-1 focus:ring-accent-brand/20 transition-colors" :disabled="!store.activeConnection || thinking" @keydown.enter="sendChat" />
           <Button size="sm" :disabled="!input.trim() || thinking || !store.activeConnection" @click="sendChat">Send</Button>
         </div>
       </div>

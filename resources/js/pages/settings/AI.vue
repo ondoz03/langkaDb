@@ -131,7 +131,7 @@ function modelsByProvider() {
       </p>
     </div>
 
-    <div class="border border-border bg-card p-4">
+    <div class="rounded-lg border border-border bg-card p-5">
       <div class="flex items-center justify-between">
         <div>
           <span class="text-xs font-medium text-foreground">Default Chat Model</span>
@@ -164,7 +164,7 @@ function modelsByProvider() {
       </div>
     </div>
 
-    <div class="border border-border bg-card p-4">
+    <div class="rounded-lg border border-border bg-card p-5">
       <div class="flex items-start justify-between">
         <div>
           <span class="text-xs font-medium text-foreground">System Prompt</span>
@@ -176,7 +176,7 @@ function modelsByProvider() {
       </div>
       <textarea
         v-model="systemPrompt"
-        class="mt-2 h-24 w-full resize-none border border-border bg-card p-2 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/50"
+        class="mt-2 h-24 w-full resize-none rounded-lg border border-border bg-card p-2 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-accent-brand/50 focus:ring-1 focus:ring-accent-brand/20 transition-colors"
         placeholder="Example: Gunakan bahasa Indonesia untuk semua jawaban. Fokus pada optimasi MySQL."
         maxlength="2000"
       />
@@ -195,7 +195,7 @@ function modelsByProvider() {
         <div
           v-for="p in cloudProviders"
           :key="p.id"
-          class="border border-border bg-card p-3"
+          class="rounded-lg border border-border bg-card p-4"
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -205,9 +205,9 @@ function modelsByProvider() {
             <div class="flex items-center gap-2">
               <span
                 v-if="providerStates[p.id].configured"
-                class="flex items-center gap-1 text-[10px] text-green-500"
+                class="flex items-center gap-1 text-[10px] text-accent-brand"
               >
-                <span class="h-1.5 w-1.5 rounded-full bg-green-500" />
+                <span class="h-1.5 w-1.5 rounded-full bg-accent-brand" />
                 Connected
               </span>
 
@@ -270,7 +270,7 @@ function modelsByProvider() {
         <div
           v-for="p in localProviders"
           :key="p.id"
-          class="border border-border bg-card p-3 opacity-60"
+          class="rounded-lg border border-border bg-card p-4 opacity-60"
         >
           <div class="flex items-center gap-2">
             <span class="text-sm">{{ providerIcons[p.id] }}</span>

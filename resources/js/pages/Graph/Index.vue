@@ -57,11 +57,11 @@ function handleNodeLeave() {
         v-model="searchQuery"
         type="text"
         placeholder="Search tables..."
-        class="flex-1 border border-border bg-card px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/50"
+        class="flex-1 rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-accent-brand/50 focus:ring-1 focus:ring-accent-brand/20 transition-colors"
       />
 
       <button
-        class="border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-accent"
+        class="rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-accent transition-colors"
         :class="{ 'bg-accent': showOnlyConnected }"
         title="Show only connected tables"
         @click="showOnlyConnected = !showOnlyConnected"
@@ -70,7 +70,7 @@ function handleNodeLeave() {
       </button>
 
       <button
-        class="border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-accent"
+        class="rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-accent transition-colors"
         title="Rearrange layout"
         @click="rearrange"
       >

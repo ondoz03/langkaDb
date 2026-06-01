@@ -35,7 +35,7 @@ defineProps<{
         class="space-y-6 text-center"
         v-slot="{ processing }"
     >
-        <Button :disabled="processing" variant="secondary">
+        <Button :disabled="processing" variant="accent">
             <Spinner v-if="processing" />
             Resend verification email
         </Button>

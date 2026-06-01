@@ -50,8 +50,8 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
                         :key="toUrl(item.href)"
                         variant="ghost"
                         :class="[
-                            'w-full justify-start',
-                            { 'bg-muted': isCurrentOrParentUrl(item.href) },
+                            'w-full justify-start rounded-lg',
+                            { 'bg-accent-brand/10 text-accent-brand': isCurrentOrParentUrl(item.href) },
                         ]"
                         as-child
                     >

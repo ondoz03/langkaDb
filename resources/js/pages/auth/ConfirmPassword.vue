@@ -56,6 +56,7 @@ defineOptions({
 
             <div class="flex items-center">
                 <Button
+                    variant="accent"
                     class="w-full"
                     :disabled="processing"
                     data-test="confirm-password-button"
