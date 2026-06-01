@@ -761,16 +761,16 @@ let tray = SystemTray::new().with_menu(tray_menu);
 
 ### 8.5 Checklist Phase 5
 
-- [ ] Tauri v2 initialized dan running
-- [ ] Laravel dev server di-spawn oleh Tauri (sidecar)
-- [ ] Vault commands (store/get/delete) working
-- [ ] SSH tunnel commands working
-- [ ] System tray dengan menu basic
-- [ ] Native notifications working
-- [ ] Auto-updater configured
-- [ ] Build untuk macOS (dmg) working
-- [ ] Build untuk Windows (msi) working
-- [ ] Build untuk Linux (AppImage + deb) working
+- [x] Tauri v2 initialized dan running
+- [x] Laravel dev server di-spawn oleh Tauri (sidecar)
+- [x] Vault commands (store/get/delete) working
+- [x] SSH tunnel commands working
+- [x] System tray dengan menu basic
+- [x] Native notifications working
+- [x] Auto-updater configured
+- [ ] Build untuk macOS (dmg) working — requires macOS runner
+- [ ] Build untuk Windows (msi) working — requires Windows runner
+- [ ] Build untuk Linux (AppImage + deb) working — requires GitHub runner
 
 ---
 
