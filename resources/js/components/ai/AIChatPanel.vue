@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { getKey } from '@/modules/ai/apiKeys'
 import { MODELS } from '@/modules/ai/config'
 import { useConnectionStore } from '@/stores/connection'
+import { useAsyncJob } from '@/composables/useAsyncJob'
 
 function getActiveProvider(): { provider: string; apiKey: string } {
   const modelId = localStorage.getItem('aetherdb_default_model') ?? ''
@@ -26,6 +27,28 @@ const store = useConnectionStore()
 const messages = ref<ChatMsg[]>([])
 const input = ref('')
 const thinking = ref(false)
+const asyncJob = useAsyncJob()
+
+// Watch for async job completion to add result to chat
+import { watch } from 'vue'
+watch(() => asyncJob.jobResult.value, (result) => {
+  if (result?.status === 'completed' && result?.result) {
+    const msg = result.result as { role?: string; content?: string; timestamp?: string }
+    messages.value.push({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.content ?? 'No response',
+      timestamp: msg.timestamp ?? new Date().toISOString(),
+    })
+    thinking.value = false
+  } else if (result?.status === 'failed') {
+    messages.value.push({
+      role: 'assistant',
+      content: `Error: ${result.error ?? 'Job failed'}`,
+      timestamp: new Date().toISOString(),
+    })
+    thinking.value = false
+  }
+})
 
 async function send() {
   if (!input.value.trim() || !store.activeConnection) {
@@ -41,32 +64,41 @@ async function send() {
   try {
     const { provider, apiKey } = getActiveProvider()
     const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
-    const res = await fetch(`/api/connections/${store.activeConnection.id}/ai/chat`, {
+    const history = messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
+
+    const res = await fetch(`/api/connections/${store.activeConnection.id}/ai/chat-async`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ message: msg, api_key: apiKey, provider, system_prompt: systemPrompt }),
+      body: JSON.stringify({
+        message: msg,
+        history,
+        api_key: apiKey,
+        provider,
+        system_prompt: systemPrompt,
+        connection_name: store.activeConnection.name,
+      }),
     })
 
     const json = await res.json()
 
-    if (json.data) {
-      messages.value.push(json.data)
+    if (json.data?.job_id) {
+      asyncJob.startPolling(json.data.job_id, 2000)
     } else {
+      thinking.value = false
       messages.value.push({
         role: 'assistant',
-        content: json.message ?? 'No response',
+        content: json.message ?? 'Failed to dispatch job',
         timestamp: new Date().toISOString(),
       })
     }
   } catch {
+    thinking.value = false
     messages.value.push({
       role: 'assistant',
       content: 'Failed to get response',
       timestamp: new Date().toISOString(),
     })
-  } finally {
-    thinking.value = false
   }
 }
 </script>

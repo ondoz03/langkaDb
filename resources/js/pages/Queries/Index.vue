@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import ChatMessage from '@/components/ai/ChatMessage.vue'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
+import ExplainTree from '@/components/query/ExplainTree.vue'
 import { getKey } from '@/modules/ai/apiKeys'
 import { MODELS, PROVIDERS } from '@/modules/ai/config'
 import type { ProviderId } from '@/modules/ai/config'
@@ -14,6 +15,9 @@ const sql = ref('SELECT * FROM users LIMIT 10;')
 const running = ref(false)
 const result = ref<{ columns: string[]; rows: Record<string, unknown>[]; count: number } | null>(null)
 const error = ref<string | null>(null)
+const explainResult = ref<any>(null)
+const explainLoading = ref(false)
+const showExplain = ref(false)
 
 // Chat
 interface ChatMsg { role: 'user' | 'assistant'; content: string; timestamp: string; tokens?: { input: number; output: number; total: number } }
@@ -153,6 +157,40 @@ async function runQuery() {
   }
 }
 
+async function explainQuery() {
+  if (!store.activeConnection || !sql.value.trim()) {
+    return
+  }
+
+  explainLoading.value = true
+  explainResult.value = null
+  error.value = null
+  showExplain.value = true
+
+  try {
+    const res = await fetch(`/api/connections/${store.activeConnection.id}/explain`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ sql: sql.value }),
+    })
+
+    const json = await res.json()
+
+    if (json.data) {
+      explainResult.value = json.data
+    } else {
+      error.value = json.message ?? 'EXPLAIN failed'
+      showExplain.value = false
+    }
+  } catch {
+    error.value = 'Failed to run EXPLAIN'
+    showExplain.value = false
+  } finally {
+    explainLoading.value = false
+  }
+}
+
 async function sendChat() {
   if (!input.value.trim() || !store.activeConnection || thinking.value) {
     return
@@ -285,6 +323,9 @@ function startResize(e: MouseEvent) {
           <span class="text-xs text-muted-foreground">SQL Query</span>
           <div class="flex items-center gap-2">
             <Button size="sm" variant="outline" @click="sql = ''">Clear</Button>
+            <Button size="sm" variant="outline" :disabled="explainLoading || !store.activeConnection" @click="explainQuery">
+              <Spinner v-if="explainLoading" /> Explain
+            </Button>
             <Button size="sm" :disabled="running || !store.activeConnection" @click="runQuery">
               <Spinner v-if="running" /> Run
             </Button>
@@ -296,6 +337,13 @@ function startResize(e: MouseEvent) {
       <div v-if="running" class="flex items-center justify-center py-8 text-xs text-muted-foreground">Executing...</div>
 
       <div v-else-if="error" class="border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-500">{{ error }}</div>
+
+      <ExplainTree
+        v-if="showExplain && explainResult"
+        :result="explainResult"
+        :loading="explainLoading"
+        class="mb-3"
+      />
 
       <div v-else-if="result" class="border border-border bg-card">
         <div class="border-b border-border bg-muted/30 px-3 py-1.5 text-xs font-medium text-foreground">{{ result.count }} rows returned</div>

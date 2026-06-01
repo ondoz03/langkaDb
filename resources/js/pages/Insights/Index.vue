@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Spinner } from '@/components/ui/spinner'
 import { getKey } from '@/modules/ai/apiKeys'
 import { MODELS } from '@/modules/ai/config'
 import { useConnectionStore } from '@/stores/connection'
+import { useAsyncJob } from '@/composables/useAsyncJob'
 
 interface Analysis {
   id: number
@@ -24,6 +25,19 @@ const latestResult = ref<Analysis | null>(null)
 const loading = ref(false)
 const analyzing = ref(false)
 const showHistory = ref(false)
+const { jobStatus, jobResult, error: jobError, startPolling, reset: resetJob } = useAsyncJob()
+
+// Show async job progress
+const jobProgressText = computed(() => {
+  if (!jobStatus.value) return ''
+  switch (jobStatus.value.status) {
+    case 'pending': return 'Queued...'
+    case 'processing': return `Processing... ${jobStatus.value.progress}%`
+    case 'completed': return 'Complete!'
+    case 'failed': return `Failed: ${jobError.value ?? 'Unknown error'}`
+    default: return 'Waiting...'
+  }
+})
 
 onMounted(fetchHistory)
 
@@ -38,7 +52,6 @@ async function fetchHistory() {
       if (!latestResult.value && json.data.length > 0) {
         latestResult.value = json.data[0]
       }
-
     }
   } catch {
     // silent
@@ -61,6 +74,7 @@ return
 
   analyzing.value = true
   loading.value = true
+  resetJob()
 
   try {
     const modelId = localStorage.getItem('aetherdb_default_model') ?? ''
@@ -69,17 +83,26 @@ return
     const apiKey = getKey(provider) ?? ''
     const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
 
-    await fetch(`/api/connections/${store.activeConnection.id}/ai/analyze`, {
+    const res = await fetch(`/api/connections/${store.activeConnection.id}/ai/analyze-async`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify({ api_key: apiKey, provider, system_prompt: systemPrompt, connection_name: store.activeConnection.name }),
     })
 
-    await fetchHistory()
+    const json = await res.json()
+
+    if (json.data?.job_id) {
+      startPolling(json.data.job_id, 2000)
+    }
+
+    // Still fetch history after a delay to get the new result
+    setTimeout(async () => {
+      await fetchHistory()
+      loading.value = false
+      analyzing.value = false
+    }, 3000)
   } catch {
-    // silent
-  } finally {
     loading.value = false
     analyzing.value = false
   }
@@ -119,6 +142,31 @@ function severityColor(s: string) {
           {{ analyzing ? 'Analyzing...' : 'Analyze Schema' }}
         </Button>
       </div>
+    </div>
+
+    <!-- Async job progress indicator -->
+    <div
+      v-if="jobStatus && jobStatus.status !== 'completed' && jobStatus.status !== 'failed'"
+      class="border border-border bg-card p-3"
+    >
+      <div class="flex items-center gap-2 text-xs text-muted-foreground">
+        <Spinner />
+        <span>{{ jobProgressText }}</span>
+      </div>
+      <div v-if="jobStatus.progress > 0" class="mt-2 h-1 w-full bg-muted">
+        <div
+          class="h-1 bg-primary transition-all"
+          :style="{ width: jobStatus.progress + '%' }"
+        />
+      </div>
+    </div>
+
+    <!-- Job error -->
+    <div
+      v-if="jobError"
+      class="border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-500"
+    >
+      {{ jobError }}
     </div>
 
     <div v-if="!store.activeConnection" class="flex flex-1 items-center justify-center text-sm text-muted-foreground">
