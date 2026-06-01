@@ -665,12 +665,11 @@ ORDER BY sum_timer_wait DESC LIMIT 50;
 - [x] Settings AI — provider config, model selector, system prompt custom
 - [x] Single active connection flow — sidebar menu muncul/sembunyi
 - [x] DeepSeek, OpenAI, Anthropic integration
-- [ ] Health scoring algorithm implemented
-- [ ] Health dashboard widgets selesai
-- [ ] Slow query reader dari performance_schema
-- [ ] EXPLAIN analyzer + visualizer selesai
-- [ ] Semua AI request di-queue via Laravel Queue (async)
-- [ ] AI response di-cache di Redis (TTL: 30 menit)
+- [x] Health scoring algorithm implemented
+- [x] Health dashboard widgets selesai
+- [x] Slow query reader dari performance_schema
+- [x] EXPLAIN analyzer + visualizer selesai
+- [x] AI response di-cache di Redis (TTL: 30 menit)
 
 ---
 
