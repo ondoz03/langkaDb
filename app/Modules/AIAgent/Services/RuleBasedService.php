@@ -12,8 +12,22 @@ class RuleBasedService
             'schema_analysis' => $this->analyzeSchema($prompt),
             'domain_clustering' => $this->clusterDomains($prompt),
             'optimization' => $this->optimizationSuggestions($prompt),
+            'security_analysis' => $this->analyzeSecurity($prompt),
             default => 'Rule-based analysis complete (no AI provider configured).',
         };
+    }
+
+    private function analyzeSecurity(string $prompt): string
+    {
+        return json_encode([
+            'summary' => 'Security analysis performed (rule-based fallback)',
+            'findings' => [
+                ['severity' => 'info', 'message' => 'No AI provider configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY for AI-powered security analysis.'],
+            ],
+            'recommendations' => [],
+            'score' => 0,
+            'report' => [],
+        ]);
     }
 
     private function analyzeSchema(string $prompt): string
