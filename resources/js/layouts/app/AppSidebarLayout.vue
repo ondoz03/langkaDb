@@ -5,6 +5,7 @@ import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import AIChatDock from '@/components/ai/AIChatDock.vue';
+import WindowTitleBar from '@/components/WindowTitleBar.vue';
 import { Toaster } from '@/components/ui/sonner';
 import type { BreadcrumbItem } from '@/types';
 
@@ -18,7 +19,8 @@ withDefaults(defineProps<Props>(), {
 </script>
 
 <template>
-    <AppShell variant="sidebar">
+    <WindowTitleBar />
+    <AppShell variant="sidebar" class="pt-10">
         <AppSidebar />
         <AppContent variant="sidebar" class="overflow-x-hidden">
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />

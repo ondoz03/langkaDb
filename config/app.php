@@ -43,6 +43,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Demo Mode
+    |--------------------------------------------------------------------------
+    |
+    | When enabled, the application skips real authentication and injects
+    | a synthetic demo user. Useful for local previews and onboarding.
+    | Never enable this in production.
+    |
+    */
+
+    'demo_mode' => (bool) env('DEMO_MODE', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application URL
     |--------------------------------------------------------------------------
     |

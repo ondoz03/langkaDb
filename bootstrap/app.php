@@ -21,6 +21,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/*',
         ]);
 
+        $middleware->alias([
+            'demo_or_auth' => \App\Http\Middleware\DemoOrAuth::class,
+        ]);
+
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
