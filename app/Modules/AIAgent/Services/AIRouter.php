@@ -10,6 +10,17 @@ class AIRouter
         private readonly RuleBasedService $ruleBased,
     ) {}
 
+    /**
+     * Route an AI task to the appropriate provider.
+     *
+     * STRATEGY (cost-optimized, zero-waste):
+     * 1. Deterministic tasks (schema_analysis, security, optimization)
+     *    → RuleBasedService is DEFAULT. Zero API cost, instant.
+     *    → External AI only if user explicitly passes provider != 'rule'.
+     * 2. Creative tasks (chat, documentation)
+     *    → External AI if API key exists.
+     *    → RuleBased fallback if no key or API fails.
+     */
     public function route(
         string $task,
         string $prompt,
@@ -31,16 +42,48 @@ class AIRouter
         ?string $apiKey = null,
         string $provider = 'rule',
     ): string {
-        $apiKey ??= match ($this->envKey($task)) {
-            'openai' => env('OPENAI_API_KEY'),
-            'anthropic' => env('ANTHROPIC_API_KEY'),
-            default => null,
-        };
+        $deterministicTasks = ['schema_analysis', 'security_analysis', 'optimization', 'domain_clustering'];
+        $isDeterministic = in_array($task, $deterministicTasks, true);
 
+        // Resolve API key from env if not provided
         if (!$apiKey) {
-            return $this->ruleBased->process($task, json_encode($messages));
+            $apiKey = match ($this->envKey($task)) {
+                'openai' => env('OPENAI_API_KEY'),
+                'anthropic' => env('ANTHROPIC_API_KEY'),
+                'deepseek' => env('DEEPSEEK_API_KEY'),
+                default => null,
+            };
         }
 
+        // ── DETERMINISTIC TASKS ────────────────────────────────────────────
+        // Rule-based is the DEFAULT path. Only use external AI when
+        // the caller explicitly opts in (provider != 'rule').
+        if ($isDeterministic) {
+            if ($provider === 'rule' || !$apiKey) {
+                return $this->ruleBased->process($task, json_encode($messages));
+            }
+            // Explicit external AI request for deterministic task
+            return $this->callExternal($task, $messages, $apiKey, $provider);
+        }
+
+        // ── CREATIVE / CHAT TASKS ──────────────────────────────────────────
+        // Prefer external AI for chat/documentation if key exists.
+        if ($apiKey && $provider !== 'rule') {
+            $result = $this->callExternal($task, $messages, $apiKey, $provider);
+            if ($result) {
+                return $result;
+            }
+        }
+
+        // Fallback to rule-based (zero cost, always available)
+        return $this->ruleBased->process($task, json_encode($messages));
+    }
+
+    /**
+     * Call external AI provider with automatic fallback.
+     */
+    private function callExternal(string $task, array $messages, string $apiKey, string $provider): ?string
+    {
         $model = match ($provider) {
             'deepseek' => 'deepseek-chat',
             'anthropic' => 'claude-3-haiku-20240307',
@@ -78,12 +121,16 @@ class AIRouter
         curl_close($ch);
 
         if ($httpCode !== 200 || !$response) {
-            return $this->ruleBased->process($task, json_encode($messages));
+            \Illuminate\Support\Facades\Log::warning('AIRouter: external API failed, falling back to rule-based', [
+                'task' => $task,
+                'provider' => $provider,
+                'http_code' => $httpCode,
+            ]);
+            return null;
         }
 
         $data = json_decode($response, true);
-
-        return $data['choices'][0]['message']['content'] ?? '';
+        return $data['choices'][0]['message']['content'] ?? null;
     }
 
     private function envKey(string $task): ?string

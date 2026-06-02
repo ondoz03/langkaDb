@@ -4,6 +4,7 @@ import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
+import AIChatDock from '@/components/ai/AIChatDock.vue';
 import { Toaster } from '@/components/ui/sonner';
 import type { BreadcrumbItem } from '@/types';
 
@@ -24,6 +25,7 @@ withDefaults(defineProps<Props>(), {
             <slot />
         </AppContent>
         <CommandPalette />
+        <AIChatDock />
         <Toaster />
     </AppShell>
 </template>

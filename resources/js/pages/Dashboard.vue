@@ -212,40 +212,58 @@ const activities = computed(() => {
       </div>
     </div>
 
+    <!-- Connection Table -->
     <div
       v-if="recentConnections.length > 0"
-      class="rounded-lg border border-border bg-card p-5"
+      class="rounded-lg border border-border bg-card"
     >
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-border">
         <h3 class="text-sm font-medium text-foreground">Connections</h3>
         <Link href="/connections" class="text-xs text-accent-brand hover:underline">
           View all
         </Link>
       </div>
-      <div class="mt-3 divide-y divide-border">
-        <div
-          v-for="conn in recentConnections"
-          :key="conn.id"
-          class="flex items-center justify-between py-2.5"
-        >
-          <div class="flex items-center gap-3">
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-brand/10 font-mono text-xs font-medium text-accent-brand">
-              {{ conn.name.charAt(0).toUpperCase() }}
-            </div>
-            <div>
-              <p class="text-sm font-medium text-foreground">{{ conn.name }}</p>
-              <p class="text-xs text-muted-foreground">{{ conn.driver }} &mdash; {{ conn.host }}:{{ conn.port }}</p>
-            </div>
-          </div>
-          <span
-            class="rounded-md px-2 py-0.5 text-xs font-medium"
-            :class="conn.status === 'connected'
-              ? 'bg-green-500/10 text-green-500'
-              : 'bg-red-500/10 text-red-500'"
-          >
-            {{ conn.status }}
-          </span>
-        </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border bg-muted/30">
+              <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Name</th>
+              <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Driver</th>
+              <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Host</th>
+              <th class="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Database</th>
+              <th class="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            <tr
+              v-for="conn in recentConnections"
+              :key="conn.id"
+              class="hover:bg-accent/40 transition-colors"
+            >
+              <td class="px-4 py-2.5">
+                <div class="flex items-center gap-2.5">
+                  <div class="flex h-7 w-7 items-center justify-center rounded-md bg-accent-brand/10 font-mono text-xs font-medium text-accent-brand">
+                    {{ conn.name.charAt(0).toUpperCase() }}
+                  </div>
+                  <span class="font-medium text-foreground">{{ conn.name }}</span>
+                </div>
+              </td>
+              <td class="px-4 py-2.5 text-muted-foreground">{{ conn.driver }}</td>
+              <td class="px-4 py-2.5 text-muted-foreground font-mono text-xs">{{ conn.host }}:{{ conn.port }}</td>
+              <td class="px-4 py-2.5 text-muted-foreground">{{ conn.database }}</td>
+              <td class="px-4 py-2.5 text-right">
+                <span
+                  class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="conn.status === 'connected'
+                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                    : 'bg-red-500/10 text-red-600 dark:text-red-400'"
+                >
+                  {{ conn.status }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>

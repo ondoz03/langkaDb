@@ -17,8 +17,9 @@ return [
     'ttl' => [
         'recommendation' => (int) env('AI_CACHE_TTL_RECOMMENDATION', 1800), // 30 minutes
         'chat'           => (int) env('AI_CACHE_TTL_CHAT', 3600),          // 1 hour
-        'health'         => (int) env('AI_CACHE_TTL_HEALTH', 900),         // 15 minutes
-        'schema'         => (int) env('AI_CACHE_TTL_SCHEMA', 300),         // 5 minutes
+        'health'         => (int) env('AI_CACHE_TTL_HEALTH', 3600),        // 1 hour
+        'schema'         => (int) env('AI_CACHE_TTL_SCHEMA', 86400),       // 24 hours
+        'documentation'  => (int) env('AI_CACHE_TTL_DOCS', 604800),        // 7 days
     ],
 
     /*

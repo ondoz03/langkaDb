@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\AIAgent\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Modules\AIAgent\Services\AICacheService;
 use App\Modules\AIAgent\Services\AIRouter;
 use App\Modules\Schema\Services\ContextBuilder;
 use App\Modules\Schema\Services\SchemaFormatter;
@@ -17,6 +18,7 @@ class AIController extends Controller
 {
     public function __construct(
         private readonly AIRouter $router,
+        private readonly AICacheService $cache,
         private readonly ContextBuilder $contextBuilder,
         private readonly SchemaFormatter $formatter,
     ) {}
@@ -25,8 +27,23 @@ class AIController extends Controller
     {
         try {
             $context = $this->contextBuilder->build($id, 'database');
-
             $schemaCompact = $this->formatter->compact($context);
+            $schemaHash = $this->cache->schemaHash($context->toArray());
+
+            // Cache key: ai:schema:{connectionId}:{hash}
+            $cacheKey = $this->cache->key('schema', $id, $schemaHash);
+            $ttl = $this->cache->ttl('schema');
+
+            $cached = $this->cache->get($cacheKey);
+
+            if ($cached) {
+                $result = is_string($cached) ? json_decode($cached, true) : $cached;
+
+                return response()->json([
+                    'data' => $result,
+                    'cached' => true,
+                ]);
+            }
 
             $prompt = <<<PROMPT
 Analyze this database schema.
@@ -47,12 +64,14 @@ PROMPT;
 
             $customPrompt = $request->input('system_prompt') ?? '';
             $systemPrompt = $this->buildSystemPrompt($customPrompt);
+            // Default to 'rule' (deterministic, zero-cost) unless user explicitly overrides
+            $provider = $request->input('provider', 'rule');
             $response = $this->router->route(
                 'schema_analysis',
                 $prompt,
                 $systemPrompt,
                 $request->input('api_key'),
-                $request->input('provider', 'openai'),
+                $provider,
             );
 
             $parsed = $this->parseAIResponse($response);
@@ -60,27 +79,132 @@ PROMPT;
             $inputTokens = (int) (mb_strlen($prompt) / 4);
             $outputTokens = (int) (mb_strlen($response) / 4);
 
+            // Persist to DB (fire-and-forget, non-blocking)
             DB::table('ai_analyses')->insert([
                 'connection_id' => $id,
                 'connection_name' => $request->input('connection_name', 'Unknown'),
-                'provider' => $request->input('provider', 'openai'),
+                'provider' => $provider,
                 'result' => json_encode($parsed),
                 'score' => $score,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            return response()->json([
-                'data' => [
-                    'findings' => $parsed['findings'] ?? [],
-                    'recommendations' => $parsed['recommendations'] ?? [],
-                    'score' => $score,
-                    'tokens' => [
-                        'input' => $inputTokens,
-                        'output' => $outputTokens,
-                        'total' => $inputTokens + $outputTokens,
-                    ],
+            $result = [
+                'findings' => $parsed['findings'] ?? [],
+                'recommendations' => $parsed['recommendations'] ?? [],
+                'score' => $score,
+                'tokens' => [
+                    'input' => $inputTokens,
+                    'output' => $outputTokens,
+                    'total' => $inputTokens + $outputTokens,
                 ],
+            ];
+
+            // Store in cache
+            $this->cache->set($cacheKey, json_encode($result), $ttl);
+
+            return response()->json([
+                'data' => $result,
+                'cached' => false,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get cached health score for a connection.
+     */
+    public function healthScore(string $id): JsonResponse
+    {
+        try {
+            $context = $this->contextBuilder->build($id, 'database');
+            $schemaHash = $this->cache->schemaHash($context->toArray());
+
+            $cacheKey = $this->cache->key('health', $id, $schemaHash);
+            $ttl = $this->cache->ttl('health');
+
+            $cached = $this->cache->get($cacheKey);
+
+            if ($cached) {
+                $result = is_string($cached) ? json_decode($cached, true) : $cached;
+
+                return response()->json([
+                    'data' => $result,
+                    'cached' => true,
+                ]);
+            }
+
+            // Compute health score using MonitoringAgent logic deterministically
+            $tables = $context->tables;
+            $totalTables = count($tables);
+            $tablesWithIndexes = count(array_filter($tables, fn ($t) => count($t->indexes) > 0));
+            $tablesWithPk = 0;
+            $highRowNoIndex = 0;
+            $totalSizeMb = 0;
+
+            foreach ($tables as $table) {
+                $totalSizeMb += $table->sizeMb;
+                $hasPk = false;
+                foreach ($table->columns as $col) {
+                    if ($col->primary) {
+                        $hasPk = true;
+                        break;
+                    }
+                }
+                if ($hasPk) {
+                    $tablesWithPk++;
+                }
+                if ($table->rowCount > 10000 && count($table->indexes) === 0) {
+                    $highRowNoIndex++;
+                }
+            }
+
+            $indexCoverage = $totalTables > 0 ? round(($tablesWithIndexes / $totalTables) * 100, 1) : 100;
+            $structureDim = $totalTables > 0 ? (($tablesWithPk / $totalTables) * 100) : 100;
+            $indexDim = 100 - ($totalTables > 0 ? ((($totalTables - $tablesWithIndexes) / $totalTables) * 100) : 0);
+            $securityDim = $totalTables > 0 ? (($tablesWithPk / $totalTables) * 100) : 100;
+
+            $healthScore = (int) min(100,
+                ($indexCoverage * 0.35) +
+                ($structureDim * 0.30) +
+                ($indexDim * 0.20) +
+                ($securityDim * 0.15)
+            );
+
+            $grade = match (true) {
+                $healthScore >= 90 => 'A',
+                $healthScore >= 80 => 'B',
+                $healthScore >= 70 => 'C',
+                $healthScore >= 60 => 'D',
+                default => 'F',
+            };
+
+            $result = [
+                'health_score' => $healthScore,
+                'health_grade' => $grade,
+                'dimensions' => [
+                    'performance' => $indexCoverage,
+                    'structure' => round($structureDim, 1),
+                    'index' => round($indexDim, 1),
+                    'security' => round($securityDim, 1),
+                ],
+                'metrics' => [
+                    'total_tables' => $totalTables,
+                    'total_size_mb' => round($totalSizeMb, 2),
+                    'tables_with_indexes' => $tablesWithIndexes,
+                    'tables_without_pk' => $totalTables - $tablesWithPk,
+                    'high_rows_no_index' => $highRowNoIndex,
+                ],
+                'source' => 'rule-based',
+            ];
+
+            $this->cache->set($cacheKey, json_encode($result), $ttl);
+
+            return response()->json([
+                'data' => $result,
+                'cached' => false,
             ]);
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 500);
