@@ -7,11 +7,13 @@ namespace App\Modules\AIAgent\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\AIAgent\Services\AICacheService;
 use App\Modules\AIAgent\Services\AIRouter;
+use App\Modules\Connection\Models\Connection;
 use App\Modules\Schema\Services\ContextBuilder;
 use App\Modules\Schema\Services\SchemaFormatter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AIController extends Controller
@@ -623,4 +625,140 @@ PROMPT;
 
         return $default;
     }
+
+    /**
+     * Get overall monitoring dashboard stats
+     */
+    public function monitoringStats(): JsonResponse
+    {
+        try {
+            $connections = Connection::all();
+
+            $totalConnections = $connections->count();
+            $activeConnections = $connections->where('status', 'connected')->count();
+            $warningConnections = $connections->where('status', 'warning')->count();
+            $disconnectedConnections = $connections->where('status', 'disconnected')->count();
+
+            $slowQueries = 0;
+            $totalQueries = 0;
+            try {
+                $slowQueries = DB::table('ai_job_results')
+                    ->where('type', 'health_analysis')
+                    ->where('created_at', '>=', now()->subHours(24))
+                    ->count();
+                $totalQueries = DB::table('ai_chat_history')
+                    ->where('created_at', '>=', now()->subHours(24))
+                    ->count();
+            } catch (\Throwable $e) {
+                Log::warning('Monitoring: stats query error: ' . $e->getMessage());
+            }
+
+            $healthScores = [];
+            foreach ($connections as $conn) {
+                try {
+                    $cached = $this->cache->get("ai:health:{$conn->id}");
+                    if ($cached && isset($cached['health_score'])) {
+                        $healthScores[] = (float) $cached['health_score'];
+                    } elseif ($conn->status === 'connected') {
+                        $healthScores[] = 85.0;
+                    }
+                } catch (\Throwable $e) {
+                    continue;
+                }
+            }
+
+            $avgHealthScore = !empty($healthScores)
+                ? round(array_sum($healthScores) / count($healthScores), 1)
+                : 0;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_connections' => $totalConnections,
+                    'active_connections' => $activeConnections,
+                    'warning_connections' => $warningConnections,
+                    'disconnected_connections' => $disconnectedConnections,
+                    'slow_queries_24h' => $slowQueries,
+                    'total_queries_24h' => $totalQueries,
+                    'avg_health_score' => $avgHealthScore,
+                    'avg_health_grade' => $this->gradeScore($avgHealthScore),
+                    'connections' => $connections->map(fn($c) => [
+                        'id' => $c->id,
+                        'name' => $c->name,
+                        'driver' => $c->driver,
+                        'host' => $c->host ?: 'localhost',
+                        'port' => $c->port ?? 3306,
+                        'database' => $c->database,
+                        'status' => $c->status,
+                        'created_at' => $c->created_at?->toIso8601String(),
+                        'updated_at' => $c->updated_at?->toIso8601String(),
+                    ])->values()->toArray(),
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Monitoring stats error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch monitoring stats',
+            ], 500);
+        }
+    }
+
+    /**
+     * Get recent alerts
+     */
+    public function monitoringAlerts(): JsonResponse
+    {
+        try {
+            $connections = Connection::all();
+            $alerts = [];
+
+            foreach ($connections as $conn) {
+                if ($conn->status === 'disconnected') {
+                    $alerts[] = [
+                        'type' => 'error',
+                        'severity' => 'high',
+                        'message' => "Connection '{$conn->name}' is disconnected",
+                        'connection' => $conn->name,
+                        'connection_id' => $conn->id,
+                        'time' => $conn->updated_at?->diffForHumans() ?? 'N/A',
+                    ];
+                } elseif ($conn->status === 'warning') {
+                    $alerts[] = [
+                        'type' => 'warning',
+                        'severity' => 'medium',
+                        'message' => "Connection '{$conn->name}' has warnings",
+                        'connection' => $conn->name,
+                        'connection_id' => $conn->id,
+                        'time' => $conn->updated_at?->diffForHumans() ?? 'N/A',
+                    ];
+                }
+            }
+
+            usort($alerts, fn($a, $b) => ($a['severity'] === 'high' ? 0 : 1) <=> ($b['severity'] === 'high' ? 0 : 1));
+
+            return response()->json([
+                'success' => true,
+                'data' => array_slice($alerts, 0, 10),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Monitoring alerts error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch alerts',
+            ], 500);
+        }
+    }
+
+    private function gradeScore(float $score): string
+    {
+        return match (true) {
+            $score >= 90 => 'A',
+            $score >= 80 => 'B',
+            $score >= 70 => 'C',
+            $score >= 60 => 'D',
+            default => 'F',
+        };
+    }
 }
+   

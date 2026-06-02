@@ -32,6 +32,10 @@ Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
     Route::get('ai/analyses', [AIController::class, 'listAnalyses'])->name('api.ai.analyses');
     Route::delete('ai/analyses/{id}', [AIController::class, 'deleteAnalysis'])->name('api.ai.analyses.delete');
 
+    // Monitoring routes
+    Route::get('monitoring/stats', [AIController::class, 'monitoringStats'])->name('api.monitoring.stats');
+    Route::get('monitoring/alerts', [AIController::class, 'monitoringAlerts'])->name('api.monitoring.alerts');
+
     // Async job routes — queue-based AI processing
     Route::post('connections/{id}/ai/analyze-async', [AsyncJobController::class, 'analyzeAsync'])->name('api.connections.ai.analyze-async');
     Route::post('connections/{id}/ai/chat-async', [AsyncJobController::class, 'chatAsync'])->name('api.connections.ai.chat-async');
