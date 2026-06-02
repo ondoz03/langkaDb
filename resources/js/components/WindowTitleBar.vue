@@ -5,7 +5,7 @@ import { Database } from 'lucide-vue-next';
 <template>
   <div
     data-tauri-drag-region
-    class="fixed top-0 left-0 right-0 z-50 flex h-10 items-center justify-between border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 select-none"
+    class="shrink-0 flex h-10 items-center justify-between border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 select-none"
   >
     <div class="flex items-center gap-2">
       <Database class="h-4 w-4 text-primary" />

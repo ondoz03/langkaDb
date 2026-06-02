@@ -37,7 +37,7 @@ function dbStatusColor(s: string) {
 <template>
   <Head title="Monitoring" />
 
-  <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4 font-mono">
+  <div class="flex h-full flex-1 flex-col gap-4 overflow-x-auto p-4">
     <div class="flex items-center justify-between">
       <h2 class="text-lg font-medium text-foreground">Monitoring</h2>
       <span class="text-xs text-muted-foreground">Last updated: just now</span>
