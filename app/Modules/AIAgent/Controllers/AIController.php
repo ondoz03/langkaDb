@@ -377,13 +377,25 @@ PROMPT;
 
         $config = [
             'driver' => $driverMap[$connection->driver] ?? 'pdo_mysql',
-            'host' => $connection->host,
-            'port' => (int) $connection->port,
             'dbname' => $connection->database,
             'user' => $connection->username,
             'password' => $encryptor->decrypt($connection->password),
             'charset' => 'utf8mb4',
         ];
+
+        // Use unix_socket for local connections
+        if (empty($connection->host) || $connection->host === 'localhost' || $connection->host === '127.0.0.1') {
+            $socketPath = '/var/run/mysqld/mysqld.sock';
+            if (file_exists($socketPath)) {
+                $config['unix_socket'] = $socketPath;
+            } else {
+                $config['host'] = $connection->host ?: '127.0.0.1';
+                $config['port'] = (int) ($connection->port ?: 3306);
+            }
+        } else {
+            $config['host'] = $connection->host;
+            $config['port'] = (int) ($connection->port ?: 3306);
+        }
 
         try {
             $conn = \Doctrine\DBAL\DriverManager::getConnection($config);
@@ -439,28 +451,58 @@ PROMPT;
         return response()->json(['message' => 'Cleared']);
     }
 
-    private function chatStream(string $id, Request $request): StreamedResponse
+    public function chatStream(string $id, Request $request): StreamedResponse
     {
-        $context = $this->contextBuilder->build($id, 'database');
-        $userMessage = $request->input('message');
+        $userMessage = $request->input('message', '');
+        $history = $request->input('history', []);
         $customPrompt = $request->input('system_prompt') ?? '';
         $systemPrompt = $this->buildSystemPrompt($customPrompt);
-        $schemaContext = $context->toJson();
-
-        $prompt = <<<PROMPT
-Connected database schema:
-{$schemaContext}
-
-User question: {$userMessage}
-
-Answer about their database. Only discuss databases, MySQL, NoSQL, Big Data.
-Use markdown for code blocks.
-PROMPT;
-
         $apiKey = $request->input('api_key') ?? env('OPENAI_API_KEY') ?? '';
         $provider = $request->input('provider', 'openai');
+        $connectionName = $request->input('connection_name', 'Unknown');
 
-        return response()->stream(function () use ($prompt, $systemPrompt, $apiKey, $provider) {
+        // Build AI messages array with schema context
+        $aiMessages = [['role' => 'system', 'content' => $systemPrompt]];
+
+        $connection = \App\Modules\Connection\Models\Connection::find($id);
+        $dbInfo = '';
+
+        if ($connection) {
+            $dbInfo = "Terhubung ke: {$connection->name} ({$connection->driver})";
+            try {
+                $context = $this->contextBuilder->build($id, 'database');
+                $allTableNames = array_map(fn($t) => $t->name, $context->tables);
+                $dbInfo .= "\nSemua tabel: " . implode(', ', $allTableNames);
+
+                $detailTables = array_slice($context->tables, 0, 15);
+                $dbInfo .= "\n\nDetail kolom:";
+                foreach ($detailTables as $table) {
+                    $colNames = array_map(fn($c) => $c->name, $table->columns);
+                    $dbInfo .= "\n- {$table->name}(" . implode(', ', $colNames) . ')';
+                }
+            } catch (\Throwable $e) {
+                $dbInfo .= "\n(Gunakan [QUERY]SHOW TABLES[/QUERY] untuk lihat tabel)";
+            }
+        }
+
+        if ($dbInfo) {
+            $aiMessages[] = ['role' => 'system', 'content' => $dbInfo];
+        }
+
+        $recentHistory = array_slice($history, -10);
+        foreach ($recentHistory as $msg) {
+            $content = $msg['content'] ?? '';
+            if (mb_strlen($content) > 500) {
+                $content = mb_substr($content, 0, 500) . '...';
+            }
+            $aiMessages[] = ['role' => $msg['role'] ?? 'user', 'content' => $content];
+        }
+
+        $aiMessages[] = ['role' => 'user', 'content' => $userMessage];
+
+        $fullResponse = '';
+
+        return response()->stream(function () use ($aiMessages, $apiKey, $provider, &$fullResponse, $userMessage, $id, $connectionName) {
             $url = $provider === 'deepseek'
                 ? 'https://api.deepseek.com/v1/chat/completions'
                 : 'https://api.openai.com/v1/chat/completions';
@@ -471,29 +513,69 @@ PROMPT;
                 CURLOPT_POST => true,
                 CURLOPT_HTTPHEADER => [
                     'Content-Type: application/json',
-                    "Authorization: Bearer {$apiKey}",
+                    'Authorization: Bearer ' . $apiKey,
                 ],
                 CURLOPT_POSTFIELDS => json_encode([
                     'model' => $provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini',
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt ?: 'You are a helpful assistant.'],
-                        ['role' => 'user', 'content' => $prompt],
-                    ],
+                    'messages' => $aiMessages,
                     'temperature' => 0.3,
                     'max_tokens' => 4000,
                     'stream' => true,
                 ]),
-                CURLOPT_WRITEFUNCTION => function ($ch, $data) {
-                    echo $data;
-                    ob_flush();
-                    flush();
+                CURLOPT_WRITEFUNCTION => function ($ch, $data) use (&$fullResponse) {
+                    $lines = explode("\n", $data);
+                    foreach ($lines as $line) {
+                        $line = trim($line);
+                        if (empty($line) || $line === 'data: [DONE]') continue;
+                        if (str_starts_with($line, 'data: ')) {
+                            $json = substr($line, 6);
+                            $parsed = json_decode($json, true);
+                            $delta = $parsed['choices'][0]['delta']['content'] ?? '';
+                            if ($delta) {
+                                $fullResponse .= $delta;
+                                echo "data: " . json_encode(['type' => 'chunk', 'content' => $delta]) . "\n\n";
+                                ob_flush();
+                                flush();
+                            }
+                        }
+                    }
                     return strlen($data);
                 },
             ]);
 
             curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-        }, 200, ['Content-Type' => 'text/event-stream', 'Cache-Control' => 'no-cache', 'X-Accel-Buffering' => 'no']);
+
+            if ($httpCode !== 200) {
+                echo "data: " . json_encode(['type' => 'error', 'message' => "API error (HTTP {$httpCode})"]) . "\n\n";
+                ob_flush();
+                flush();
+            } elseif ($fullResponse) {
+                // Save to chat history
+                try {
+                    \Illuminate\Support\Facades\DB::table('ai_chat_history')->insert([
+                        'connection_id' => $id,
+                        'connection_name' => $connectionName,
+                        'provider' => $provider,
+                        'user_message' => $userMessage,
+                        'ai_response' => $fullResponse,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                } catch (\Throwable $e) {
+                    // Non-blocking — don't fail the stream for DB error
+                }
+
+                echo "data: " . json_encode(['type' => 'done', 'content' => $fullResponse]) . "\n\n";
+                ob_flush();
+                flush();
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     private function parseAIResponse(string $response): array

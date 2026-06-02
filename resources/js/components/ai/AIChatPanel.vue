@@ -61,11 +61,89 @@ async function send() {
   messages.value.push({ role: 'user', content: msg, timestamp: new Date().toISOString() })
   thinking.value = true
 
-  try {
-    const { provider, apiKey } = getActiveProvider()
-    const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
-    const history = messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
+  const { provider, apiKey } = getActiveProvider()
+  const systemPrompt = localStorage.getItem('aetherdb_system_prompt') ?? ''
+  const history = messages.value.slice(0, -1).map(m => ({ role: m.role, content: m.content }))
 
+  // Try streaming first
+  try {
+    const response = await fetch(`/api/connections/${store.activeConnection.id}/ai/chat-stream`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+      body: JSON.stringify({
+        message: msg,
+        history,
+        api_key: apiKey,
+        provider,
+        system_prompt: systemPrompt,
+        connection_name: store.activeConnection.name,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`)
+    }
+
+    // Create placeholder for streaming message
+    const streamMsg: ChatMsg = {
+      role: 'assistant',
+      content: '',
+      timestamp: new Date().toISOString(),
+    }
+    messages.value.push(streamMsg)
+    thinking.value = false
+
+    const reader = response.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+
+        const payload = trimmed.slice(6)
+        try {
+          const data = JSON.parse(payload)
+
+          if (data.type === 'chunk' && data.content) {
+            streamMsg.content += data.content
+            // Trigger reactivity
+            messages.value = [...messages.value]
+          } else if (data.type === 'done') {
+            streamMsg.content = data.content ?? streamMsg.content
+            messages.value = [...messages.value]
+          } else if (data.type === 'error') {
+            messages.value.pop() // Remove placeholder
+            messages.value.push({
+              role: 'assistant',
+              content: `Error: ${data.message}`,
+              timestamp: new Date().toISOString(),
+            })
+            messages.value = [...messages.value]
+          }
+        } catch {
+          // Skip malformed JSON in SSE
+        }
+      }
+    }
+
+    // Streaming succeeded — done
+    return
+  } catch {
+    // Streaming failed — fall through to async job fallback
+  }
+
+  // Fallback: async job polling
+  try {
     const res = await fetch(`/api/connections/${store.activeConnection.id}/ai/chat-async`, {
       method: 'POST',
       credentials: 'include',

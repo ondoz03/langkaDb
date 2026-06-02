@@ -41,6 +41,9 @@ export default defineConfig({
                     if (/node_modules\/@vueuse/.test(id)) {
                         return 'vendor-ai';
                     }
+                    if (/node_modules\/@tauri-apps/.test(id)) {
+                        return 'vendor-tauri';
+                    }
                 },
             },
         },

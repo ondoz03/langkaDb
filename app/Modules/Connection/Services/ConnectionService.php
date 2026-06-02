@@ -110,13 +110,25 @@ class ConnectionService
 
             $config = [
                 'driver' => $driverMap[$connection->driver] ?? 'pdo_mysql',
-                'host' => $connection->host,
-                'port' => (int) $connection->port,
                 'dbname' => $connection->database,
                 'user' => $connection->username,
                 'password' => $this->encryptor->decrypt($connection->password),
                 'charset' => 'utf8mb4',
             ];
+
+            // Use unix_socket for local connections when host is empty
+            if (empty($connection->host) || $connection->host === 'localhost' || $connection->host === '127.0.0.1') {
+                $socketPath = '/var/run/mysqld/mysqld.sock';
+                if (file_exists($socketPath)) {
+                    $config['unix_socket'] = $socketPath;
+                } else {
+                    $config['host'] = $connection->host ?: '127.0.0.1';
+                    $config['port'] = (int) ($connection->port ?: 3306);
+                }
+            } else {
+                $config['host'] = $connection->host;
+                $config['port'] = (int) ($connection->port ?: 3306);
+            }
 
             if ($connection->ssl_enabled) {
                 $config['sslmode'] = 'prefer';
