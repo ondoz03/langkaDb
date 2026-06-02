@@ -28,16 +28,23 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                manualChunks: {
-                    'vendor-vue': ['vue', 'pinia', '@inertiajs/vue3'],
-                    'vendor-ui': ['reka-ui', 'lucide-vue-next', 'vue-sonner'],
-                    'vendor-graph': ['@vue-flow/core', '@vue-flow/background', '@vue-flow/controls', '@vue-flow/minimap', '@dagrejs/dagre'],
-                    'vendor-ai': ['@vueuse/core', '@vueuse/motion'],
+                manualChunks: (id: string) => {
+                    if (/node_modules\/(vue|pinia|@inertiajs\/vue3)/.test(id)) {
+                        return 'vendor-vue';
+                    }
+                    if (/node_modules\/(reka-ui|lucide-vue-next|vue-sonner)/.test(id)) {
+                        return 'vendor-ui';
+                    }
+                    if (/node_modules\/(@vue-flow|@dagrejs\/dagre)/.test(id)) {
+                        return 'vendor-graph';
+                    }
+                    if (/node_modules\/@vueuse/.test(id)) {
+                        return 'vendor-ai';
+                    }
                 },
             },
         },
         chunkSizeWarningLimit: 500,
         cssMinify: true,
-        minify: 'esbuild',
     },
 });
