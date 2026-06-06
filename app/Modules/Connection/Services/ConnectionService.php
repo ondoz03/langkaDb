@@ -102,6 +102,47 @@ class ConnectionService
             return ['success' => false, 'message' => 'Connection not found'];
         }
 
+        $result = $this->testRaw(
+            driver: $connection->driver,
+            host: $connection->host,
+            port: $connection->port,
+            database: $connection->database,
+            username: $connection->username,
+            password: $this->encryptor->decrypt($connection->password),
+            sslEnabled: $connection->ssl_enabled,
+        );
+
+        if ($result['success']) {
+            $this->repository->update($id, ['status' => 'connected']);
+        } else {
+            $this->repository->update($id, ['status' => 'error']);
+        }
+
+        return $result;
+    }
+
+    public function testWithConfig(array $data): array
+    {
+        return $this->testRaw(
+            driver: $data['driver'],
+            host: $data['host'],
+            port: (int) ($data['port'] ?? 3306),
+            database: $data['database'],
+            username: $data['username'],
+            password: $data['password'] ?? '',
+            sslEnabled: $data['ssl_enabled'] ?? false,
+        );
+    }
+
+    private function testRaw(
+        string $driver,
+        string $host,
+        int $port,
+        string $database,
+        string $username,
+        string $password,
+        bool $sslEnabled = false,
+    ): array {
         try {
             $driverMap = [
                 'mysql' => 'pdo_mysql',
@@ -109,40 +150,35 @@ class ConnectionService
             ];
 
             $config = [
-                'driver' => $driverMap[$connection->driver] ?? 'pdo_mysql',
-                'dbname' => $connection->database,
-                'user' => $connection->username,
-                'password' => $this->encryptor->decrypt($connection->password),
+                'driver' => $driverMap[$driver] ?? 'pdo_mysql',
+                'dbname' => $database,
+                'user' => $username,
+                'password' => $password,
                 'charset' => 'utf8mb4',
             ];
 
-            // Use unix_socket for local connections when host is empty
-            if (empty($connection->host) || $connection->host === 'localhost' || $connection->host === '127.0.0.1') {
+            if (empty($host) || $host === 'localhost' || $host === '127.0.0.1') {
                 $socketPath = '/var/run/mysqld/mysqld.sock';
                 if (file_exists($socketPath)) {
                     $config['unix_socket'] = $socketPath;
                 } else {
-                    $config['host'] = $connection->host ?: '127.0.0.1';
-                    $config['port'] = (int) ($connection->port ?: 3306);
+                    $config['host'] = $host ?: '127.0.0.1';
+                    $config['port'] = $port ?: 3306;
                 }
             } else {
-                $config['host'] = $connection->host;
-                $config['port'] = (int) ($connection->port ?: 3306);
+                $config['host'] = $host;
+                $config['port'] = $port;
             }
 
-            if ($connection->ssl_enabled) {
+            if ($sslEnabled) {
                 $config['sslmode'] = 'prefer';
             }
 
             $conn = \Doctrine\DBAL\DriverManager::getConnection($config);
             $conn->executeQuery('SELECT 1');
 
-            $this->repository->update($id, ['status' => 'connected']);
-
             return ['success' => true, 'message' => 'Connection successful'];
         } catch (\Throwable $e) {
-            $this->repository->update($id, ['status' => 'error']);
-
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }

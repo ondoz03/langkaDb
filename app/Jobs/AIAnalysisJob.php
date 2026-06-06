@@ -28,6 +28,7 @@ class AIAnalysisJob implements ShouldQueue
         private readonly string $provider,
         private readonly string $apiKey,
         private readonly string $systemPrompt,
+        private readonly int $jobResultId,
     ) {}
 
     public function handle(
@@ -35,19 +36,13 @@ class AIAnalysisJob implements ShouldQueue
         ContextBuilder $contextBuilder,
         SchemaFormatter $formatter,
     ): void {
-        DB::table('ai_job_results')->insert([
-            'job_class' => self::class,
-            'connection_id' => $this->connectionId,
-            'status' => 'processing',
-            'input' => json_encode([
-                'connection_id' => $this->connectionId,
-                'provider' => $this->provider,
-            ]),
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $jobId = DB::getPdo()->lastInsertId();
+        // Mark as processing
+        DB::table('ai_job_results')
+            ->where('id', $this->jobResultId)
+            ->update([
+                'status' => 'processing',
+                'updated_at' => now(),
+            ]);
 
         try {
             $context = $contextBuilder->build($this->connectionId, 'database');
@@ -70,23 +65,34 @@ Respond ONLY with JSON:
 }
 PROMPT;
 
-            $config = [
-                'model' => match ($this->provider) {
-                    'deepseek' => 'deepseek-chat',
-                    'anthropic' => 'claude-3-haiku-20240307',
-                    'ollama' => 'ollama-local',
-                    default => 'gpt-4o-mini',
-                },
-                'temperature' => 0.3,
-                'max_tokens' => 2000,
-            ];
+            if ($this->provider === 'rule') {
+                // Use the multi-agent Orchestrator (zero-cost, rule-based)
+                $result = $orchestrator->analyzeFull($context);
+                $parsed = [
+                    'findings' => $result['findings'] ?? [],
+                    'recommendations' => $result['recommendations'] ?? [],
+                    'score' => $result['composite_score'] ?? $result['score'] ?? 0,
+                ];
+            } else {
+                $config = [
+                    'model' => match ($this->provider) {
+                        'deepseek' => 'deepseek-chat',
+                        'anthropic' => 'claude-3-haiku-20240307',
+                        'ollama' => 'ollama-local',
+                        default => 'gpt-4o-mini',
+                    },
+                    'temperature' => 0.3,
+                    'max_tokens' => 2000,
+                ];
 
-            $response = $this->callAI($prompt, $config);
-            $parsed = $this->parseResponse($response);
+                $response = $this->callAI($prompt, $config);
+                $parsed = $this->parseResponse($response);
+            }
+
             $score = $parsed['score'] ?? 0;
 
             DB::table('ai_job_results')
-                ->where('id', $jobId)
+                ->where('id', $this->jobResultId)
                 ->update([
                     'status' => 'completed',
                     'result' => json_encode([
@@ -112,7 +118,7 @@ PROMPT;
             ]);
         } catch (\Throwable $e) {
             DB::table('ai_job_results')
-                ->where('id', $jobId)
+                ->where('id', $this->jobResultId)
                 ->update([
                     'status' => 'failed',
                     'error' => $e->getMessage(),

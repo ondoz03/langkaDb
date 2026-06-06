@@ -102,4 +102,21 @@ class ConnectionController extends Controller
 
         return response()->json($result);
     }
+
+    public function testConnection(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'driver' => 'required|in:mysql,mariadb',
+            'host' => 'required|string|max:255',
+            'port' => 'required|integer|min:1|max:65535',
+            'database' => 'required|string|max:255',
+            'username' => 'required|string|max:255',
+            'password' => 'nullable|string',
+            'ssl_enabled' => 'boolean',
+        ]);
+
+        $result = $this->connectionService->testWithConfig($validated);
+
+        return response()->json($result);
+    }
 }

@@ -21,7 +21,7 @@ class AsyncJobController extends Controller
     public function analyzeAsync(string $id, Request $request): JsonResponse
     {
         $request->validate([
-            'provider' => 'nullable|string|in:openai,anthropic,deepseek,ollama',
+            'provider' => 'nullable|string|in:openai,anthropic,deepseek,ollama,rule',
             'connection_name' => 'nullable|string|max:255',
         ]);
 
@@ -30,25 +30,33 @@ class AsyncJobController extends Controller
         $systemPrompt = $request->input('system_prompt') ?? '';
         $connectionName = $request->input('connection_name', 'Unknown');
 
+        // Create the job result record BEFORE dispatching so the frontend
+        // can immediately get a valid job_id for polling
+        $jobId = DB::table('ai_job_results')->insertGetId([
+            'job_class' => AIAnalysisJob::class,
+            'connection_id' => $id,
+            'status' => 'pending',
+            'input' => json_encode([
+                'connection_id' => $id,
+                'provider' => $provider,
+            ]),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
         AIAnalysisJob::dispatch(
             connectionId: $id,
             connectionName: $connectionName,
             provider: $provider,
             apiKey: $apiKey,
             systemPrompt: $systemPrompt,
+            jobResultId: $jobId,
         );
-
-        // Fetch the job result that was just inserted
-        $jobResult = DB::table('ai_job_results')
-            ->where('connection_id', $id)
-            ->where('job_class', AIAnalysisJob::class)
-            ->orderByDesc('id')
-            ->first();
 
         return response()->json([
             'data' => [
-                'job_id' => $jobResult?->id,
-                'status' => 'processing',
+                'job_id' => $jobId,
+                'status' => 'pending',
             ],
         ]);
     }

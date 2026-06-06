@@ -7,6 +7,7 @@ namespace App\Modules\AIAgent\Controllers;
 use App\Http\Controllers\Controller;
 use App\Modules\AIAgent\Services\AICacheService;
 use App\Modules\AIAgent\Services\AIRouter;
+use App\Modules\AIAgent\Services\Orchestrator;
 use App\Modules\Connection\Models\Connection;
 use App\Modules\Schema\Services\ContextBuilder;
 use App\Modules\Schema\Services\SchemaFormatter;
@@ -20,16 +21,21 @@ class AIController extends Controller
 {
     public function __construct(
         private readonly AIRouter $router,
+        private readonly Orchestrator $orchestrator,
         private readonly AICacheService $cache,
         private readonly ContextBuilder $contextBuilder,
         private readonly SchemaFormatter $formatter,
     ) {}
 
+    /**
+     * Analyze schema using multi-agent orchestration.
+     * All 5 agents (schema, security, monitoring, optimization, documentation)
+     * run sequentially and their results are aggregated into a composite score.
+     */
     public function analyzeSchema(string $id, Request $request): JsonResponse
     {
         try {
             $context = $this->contextBuilder->build($id, 'database');
-            $schemaCompact = $this->formatter->compact($context);
             $schemaHash = $this->cache->schemaHash($context->toArray());
 
             // Cache key: ai:schema:{connectionId}:{hash}
@@ -47,67 +53,39 @@ class AIController extends Controller
                 ]);
             }
 
-            $prompt = <<<PROMPT
-Analyze this database schema.
-
-{$schemaCompact}
-
-Identify problematic tables and their specific issues.
-For each finding, mention the table name and what's wrong.
-For each recommendation, mention which table to apply it to.
-
-Respond ONLY with JSON:
-{
-  "findings": [{"severity": "high|medium|low", "table": "table_name", "message": "specific issue with this table"}],
-  "recommendations": [{"priority": "high|medium|low", "table": "table_name", "message": "what to do and why"}],
-  "score": 0-100
-}
-PROMPT;
-
-            $customPrompt = $request->input('system_prompt') ?? '';
-            $systemPrompt = $this->buildSystemPrompt($customPrompt);
-            // Default to 'rule' (deterministic, zero-cost) unless user explicitly overrides
             $provider = $request->input('provider', 'rule');
-            $response = $this->router->route(
-                'schema_analysis',
-                $prompt,
-                $systemPrompt,
-                $request->input('api_key'),
-                $provider,
-            );
+            $apiKey = $request->input('api_key');
 
-            $parsed = $this->parseAIResponse($response);
-            $score = $parsed['score'] ?? 0;
-            $inputTokens = (int) (mb_strlen($prompt) / 4);
-            $outputTokens = (int) (mb_strlen($response) / 4);
+            // Run multi-agent orchestration
+            $result = $this->orchestrator->analyzeFull($context, $apiKey, $provider);
+            $compositeScore = $result['composite_score'] ?? $result['score'] ?? 0;
 
             // Persist to DB (fire-and-forget, non-blocking)
             DB::table('ai_analyses')->insert([
                 'connection_id' => $id,
                 'connection_name' => $request->input('connection_name', 'Unknown'),
                 'provider' => $provider,
-                'result' => json_encode($parsed),
-                'score' => $score,
+                'result' => json_encode($result),
+                'score' => $compositeScore,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
 
-            $result = [
-                'findings' => $parsed['findings'] ?? [],
-                'recommendations' => $parsed['recommendations'] ?? [],
-                'score' => $score,
-                'tokens' => [
-                    'input' => $inputTokens,
-                    'output' => $outputTokens,
-                    'total' => $inputTokens + $outputTokens,
-                ],
+            // Add metadata for the response
+            $responseData = [
+                'findings' => $result['findings'],
+                'recommendations' => $result['recommendations'],
+                'score' => $compositeScore,
+                'composite_score' => $compositeScore,
+                'agents' => $result['agents'],
+                'metadata' => $result['metadata'],
             ];
 
             // Store in cache
-            $this->cache->set($cacheKey, json_encode($result), $ttl);
+            $this->cache->set($cacheKey, json_encode($responseData), $ttl);
 
             return response()->json([
-                'data' => $result,
+                'data' => $responseData,
                 'cached' => false,
             ]);
         } catch (\Throwable $e) {
@@ -116,7 +94,9 @@ PROMPT;
     }
 
     /**
-     * Get cached health score for a connection.
+     * Get composite health score from multi-agent orchestration.
+     * Uses Orchestrator::analyzeFull() to get weighted composite score
+     * from all 5 agents (schema, security, monitoring, optimization, documentation).
      */
     public function healthScore(string $id): JsonResponse
     {
@@ -138,68 +118,28 @@ PROMPT;
                 ]);
             }
 
-            // Compute health score using MonitoringAgent logic deterministically
-            $tables = $context->tables;
-            $totalTables = count($tables);
-            $tablesWithIndexes = count(array_filter($tables, fn ($t) => count($t->indexes) > 0));
-            $tablesWithPk = 0;
-            $highRowNoIndex = 0;
-            $totalSizeMb = 0;
-
-            foreach ($tables as $table) {
-                $totalSizeMb += $table->sizeMb;
-                $hasPk = false;
-                foreach ($table->columns as $col) {
-                    if ($col->primary) {
-                        $hasPk = true;
-                        break;
-                    }
-                }
-                if ($hasPk) {
-                    $tablesWithPk++;
-                }
-                if ($table->rowCount > 10000 && count($table->indexes) === 0) {
-                    $highRowNoIndex++;
-                }
-            }
-
-            $indexCoverage = $totalTables > 0 ? round(($tablesWithIndexes / $totalTables) * 100, 1) : 100;
-            $structureDim = $totalTables > 0 ? (($tablesWithPk / $totalTables) * 100) : 100;
-            $indexDim = 100 - ($totalTables > 0 ? ((($totalTables - $tablesWithIndexes) / $totalTables) * 100) : 0);
-            $securityDim = $totalTables > 0 ? (($tablesWithPk / $totalTables) * 100) : 100;
-
-            $healthScore = (int) min(100,
-                ($indexCoverage * 0.35) +
-                ($structureDim * 0.30) +
-                ($indexDim * 0.20) +
-                ($securityDim * 0.15)
-            );
+            // Run multi-agent analysis for composite scoring
+            $analysis = $this->orchestrator->analyzeFull($context);
+            $compositeScore = $analysis['composite_score'] ?? 0;
+            $agentScores = $analysis['metadata']['agent_scores'] ?? [];
 
             $grade = match (true) {
-                $healthScore >= 90 => 'A',
-                $healthScore >= 80 => 'B',
-                $healthScore >= 70 => 'C',
-                $healthScore >= 60 => 'D',
+                $compositeScore >= 90 => 'A',
+                $compositeScore >= 80 => 'B',
+                $compositeScore >= 70 => 'C',
+                $compositeScore >= 60 => 'D',
                 default => 'F',
             };
 
             $result = [
-                'health_score' => $healthScore,
+                'health_score' => $compositeScore,
                 'health_grade' => $grade,
-                'dimensions' => [
-                    'performance' => $indexCoverage,
-                    'structure' => round($structureDim, 1),
-                    'index' => round($indexDim, 1),
-                    'security' => round($securityDim, 1),
-                ],
-                'metrics' => [
-                    'total_tables' => $totalTables,
-                    'total_size_mb' => round($totalSizeMb, 2),
-                    'tables_with_indexes' => $tablesWithIndexes,
-                    'tables_without_pk' => $totalTables - $tablesWithPk,
-                    'high_rows_no_index' => $highRowNoIndex,
-                ],
-                'source' => 'rule-based',
+                'composite_score' => $compositeScore,
+                'agent_scores' => $agentScores,
+                'agents' => $analysis['agents'],
+                'total_findings' => $analysis['metadata']['total_findings'] ?? 0,
+                'total_recommendations' => $analysis['metadata']['total_recommendations'] ?? 0,
+                'source' => 'multi-agent',
             ];
 
             $this->cache->set($cacheKey, json_encode($result), $ttl);
@@ -215,7 +155,14 @@ PROMPT;
 
     public function listAnalyses(Request $request): JsonResponse
     {
-        $analyses = DB::table('ai_analyses')
+        $query = DB::table('ai_analyses');
+
+        // Filter by connection_id if provided
+        if ($request->has('connection_id')) {
+            $query->where('connection_id', $request->input('connection_id'));
+        }
+
+        $analyses = $query
             ->orderBy('created_at', 'desc')
             ->limit(50)
             ->get()

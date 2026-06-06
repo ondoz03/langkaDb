@@ -14,6 +14,7 @@ Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
     Route::put('connections/{id}', [ConnectionController::class, 'update'])->name('api.connections.update');
     Route::delete('connections/{id}', [ConnectionController::class, 'destroy'])->name('api.connections.destroy');
     Route::post('connections/{id}/test', [ConnectionController::class, 'test'])->name('api.connections.test');
+    Route::post('connections/test-connection', [ConnectionController::class, 'testConnection'])->name('api.connections.test-connection');
 
     Route::get('connections/{id}/schema', [SchemaController::class, 'schema'])->name('api.connections.schema');
     Route::get('connections/{id}/schema/tables', [SchemaController::class, 'tables'])->name('api.connections.schema.tables');

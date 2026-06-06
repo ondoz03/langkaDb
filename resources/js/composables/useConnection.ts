@@ -182,6 +182,35 @@ export function useConnection() {
     }
   }
 
+  async function testConnectionWithData(data: Record<string, unknown>) {
+    error.value = null
+
+    try {
+      const res = await fetch('/api/connections/test-connection', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      const result = await res.json()
+
+      if (result.success) {
+        toast.success('Connection test successful')
+      } else {
+        toast.error(result.message ?? 'Connection test failed')
+      }
+
+      return result
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Test failed'
+      error.value = msg
+      toast.error(msg)
+
+      return { success: false, message: msg }
+    }
+  }
+
   async function connectConnection(id: string) {
     loading.value = true
     error.value = null
@@ -220,6 +249,7 @@ export function useConnection() {
     updateConnection,
     deleteConnection,
     testConnection,
+    testConnectionWithData,
     connectConnection,
     disconnectConnection,
   }
