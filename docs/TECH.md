@@ -341,6 +341,58 @@ php artisan migrate:rollback
 - Development: `database` (SQLite)
 - Production: Redis
 
+### Async Job System (AI Analysis)
+
+**Alur:** User klik "Analyze" → Backend dispatch job ke queue → Queue worker proses → Frontend polling progress.
+
+**File kunci:**
+| File | Fungsi |
+|------|--------|
+| `app/Jobs/AIAnalysisJob.php` | Queue job — handle async AI analysis |
+| `app/Modules/AIAgent/Controllers/AsyncJobController.php` | REST endpoints: dispatch, status, result |
+| `app/Modules/AIAgent/Services/Orchestrator.php` | Multi-agent orchestration dengan `onProgress` callback |
+| `resources/js/composables/useAsyncJob.ts` | Frontend polling (setInterval 2s) |
+| `database/migrations/..._create_ai_job_results_table.php` | Tabel monitoring job (status, progress, result) |
+
+**Tabel `ai_job_results`:**
+```sql
+CREATE TABLE ai_job_results (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  connection_id CHAR(36),
+  job_class     VARCHAR(255),
+  status        VARCHAR(20) DEFAULT 'pending',   -- pending|processing|completed|failed
+  progress      INTEGER DEFAULT 0,               -- 0-100
+  input         TEXT,                              -- Job input JSON
+  result        TEXT,                              -- Job result JSON
+  error         TEXT,                              -- Error message if failed
+  created_at    TIMESTAMP,
+  updated_at    TIMESTAMP
+);
+```
+
+**Progress update flow (rule-based provider):**
+1. `AIAnalysisJob::handle()` → update `progress = 5, status = 'processing'`
+2. Context built → update `progress = 20`
+3. Pass `onProgress` callback ke `Orchestrator::analyzeFull()`
+4. Orchestrator panggil callback tiap agent selesai: 25, 50, 65, 80
+5. Data disimpan → update `progress = 80`
+6. Selesai → update `status = 'completed', progress = 100`
+7. Gagal → catch → update `status = 'failed', progress = 0, error = message`
+
+**Menjalankan worker:**
+```bash
+# Satu job saja (testing)
+php artisan queue:work --once --queue=default
+
+# Continuous (development)
+php artisan queue:work --queue=default
+
+# Production (via Supervisor)
+# lihat config/supervisor/queue.conf
+```
+
+**Peringatan Doctrine DBAL:** `SchemaParser::parseTable()` menghasilkan array index asosiatif dari Doctrine (`['PRIMARY' => IndexDTO, ...]`). Jangan akses dengan index numerik tanpa `array_values()`.
+
 ---
 
 ## 5. Arsitektur Module
@@ -531,6 +583,9 @@ php artisan migrate:fresh        # Reset DB + migrate ulang (HATI-HATI)
 | `app/Modules/Connection/` | Connection management module |
 | `app/Modules/Schema/` | Schema parser engine |
 | `app/Modules/AIAgent/` | AI multi-agent system |
+| `app/Jobs/AIAnalysisJob.php` | Async queue job untuk AI analysis |
+| `app/Modules/AIAgent/Controllers/AsyncJobController.php` | REST endpoints untuk async job (dispatch, status, result) |
+| `app/Modules/AIAgent/Services/Orchestrator.php` | Multi-agent orchestration (progress callback) |
 | `routes/web.php` | Web routes (Inertia pages) |
 | `routes/api.php` | API routes (JSON endpoints) |
 | `config/inertia.php` | Inertia config (SSR, pages) |
@@ -542,11 +597,17 @@ php artisan migrate:fresh        # Reset DB + migrate ulang (HATI-HATI)
 | `resources/js/pages/` | Inertia page components |
 | `resources/js/components/` | Reusable Vue components |
 | `resources/js/composables/` | Vue composables (logic) |
+| `resources/js/composables/useAsyncJob.ts` | Frontend polling untuk async job status |
 | `resources/js/stores/` | Pinia stores |
 | `resources/js/types/` | TypeScript type definitions |
 | `resources/js/layouts/` | Layout components |
 | `resources/js/routes/` | Wayfinder auto-generated routes |
 | `resources/js/lib/` | Utilities (cn, toast) |
+
+### Database
+| Path | Fungsi |
+|------|--------|
+| `database/migrations/..._create_ai_job_results_table.php` | Tabel monitoring async job (status, progress, result) |
 
 ### Konfigurasi
 | Path | Fungsi |
@@ -562,4 +623,4 @@ php artisan migrate:fresh        # Reset DB + migrate ulang (HATI-HATI)
 ---
 
 *Dokumen ini sebagai referensi teknologi yang dipakai di AetherDB AI.*
-*Terakhir diupdate: 2026-05-20*
+*Terakhir diupdate: 2026-06-08*

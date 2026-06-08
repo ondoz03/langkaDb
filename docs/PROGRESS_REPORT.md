@@ -1,6 +1,6 @@
 # AetherDB AI (langkaDb) — Progress Report
 
-**Tanggal:** 2 Juni 2026
+**Tanggal:** 8 Juni 2026
 **Branch:** `phase-1`
 **Lokasi:** `~/herd/langkaDb/`
 
@@ -39,6 +39,10 @@
 - [x] Health scoring (4 dimensi) + dashboard Widgets
 - [x] Schema compact formatter
 - [x] AI response cache
+- [x] **Async job progress tracking** — `AIAnalysisJob` update `progress` column di `ai_job_results` (5% → 100%)
+- [x] **Orchestrator progress callback** — tiap agent selesai, progress naik (25/50/65/80)
+- [x] **Bug fix: OptimizationAgent index crash** — `array_values()` untuk Doctrine DBAL associative index array
+- [x] **Bug fix: progress stuck di 0%** — karena job tidak pernah update progress sebelumnya
 
 ## ✅ Phase 5 — Tauri Desktop Packaging *COMPLETE*
 - [x] Tauri v2 init + running
@@ -53,6 +57,9 @@
 - [x] CSP headers + demo mode + schema chunker
 - [x] Title bar fix + window chrome
 - [x] Build error fixes (ExplainTree + Vite config)
+- [x] **Bug fix: OptimizationAgent crash** — `array_values()` on Doctrine DBAL index collection
+- [x] **Feature: Progress reporting mechanism** — `updateProgress()` helper di `AIAnalysisJob`
+- [x] **Feature: Orchestrator callback** — `onProgress` callable di `analyzeFull()`
 - [ ] ❌ QA checklist — koneksi real MySQL, 100 tabel test
 - [ ] ❌ AI response streaming
 - [ ] ❌ Lazy loading / code splitting
@@ -66,7 +73,6 @@
 | Item | Value |
 |------|-------|
 | Total commits | 26 |
-| Commit hari ini | 6 (frontend polish, P0 hardening, build fix) |
 | Stack | Laravel 13 / PHP 8.4 / Vue 3 / Tauri v2 |
 | Database dev | SQLite |
 | Branch | phase-1 |

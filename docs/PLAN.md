@@ -5,7 +5,7 @@
 **Status:** Phase 4 ✅ (AI Engine) — Insight analysis, Query execution, AI Chat floating  
 **Project:** AetherDB AI — AI-Powered Database Intelligence Desktop App  
 **Stack:** Laravel 13 + Vue 3 + Inertia.js + Tauri v2 + AI Multi-Agent  
-**Last Updated:** 2026-05-21
+**Last Updated:** 2026-06-08
 
 ---
 
@@ -652,7 +652,73 @@ ORDER BY sum_timer_wait DESC LIMIT 50;
 - Render sebagai tree visualization di frontend
 - Highlight: Full Table Scan (merah), Index Scan (hijau), Nested Loop (kuning)
 
-### 7.7 Checklist Phase 4
+### 7.7 Async Analysis Job System
+
+**Flow:**
+```mermaid
+sequenceDiagram
+    participant User as Browser (Insights)
+    participant API as AsyncJobController
+    participant DB as ai_job_results table
+    participant Queue as Database Queue
+    participant Job as AIAnalysisJob
+    participant Orchestrator as Orchestrator
+
+    User->>API: POST /analyze-async
+    API->>DB: INSERT job (status: pending, progress: 0)
+    API->>Queue: dispatch AIAnalysisJob
+    API-->>User: { job_id, status: "pending" }
+    
+    loop setInterval (2s)
+        User->>API: GET /status/{id}
+        API->>DB: SELECT status, progress
+        API-->>User: { status, progress }
+    end
+    
+    Queue->>Job: execute handle()
+    Job->>DB: UPDATE progress = 5, status = 'processing'
+    Job->>Job: build schema context
+    Job->>DB: UPDATE progress = 20
+    Job->>Orchestrator: analyzeFull()
+    Orchestrator->>Agents: SchemaAgent
+    Orchestrator->>DB: onProgress(25)
+    Orchestrator->>Agents: SecurityAgent
+    Orchestrator->>DB: onProgress(50)
+    Orchestrator->>Agents: MonitoringAgent
+    Orchestrator->>DB: onProgress(65)
+    Orchestrator->>Agents: OptimizationAgent
+    Orchestrator->>DB: onProgress(80)
+    Orchestrator-->>Job: { findings, recommendations, score }
+    Job->>DB: UPDATE progress = 80
+    Job->>DB: INSERT ai_analyses
+    Job->>DB: UPDATE status = 'completed', progress = 100
+    Note over User,API: Next poll sees status=completed
+    
+    User->>API: GET /result/{id}
+    API-->>User: { findings, recommendations, score }
+```
+
+**Components:**
+- `app/Jobs/AIAnalysisJob.php` — Queue job untuk menjalankan analisis secara asinkron
+- `app/Modules/AIAgent/Controllers/AsyncJobController.php` — REST endpoints untuk dispatch, status, dan result
+- `app/Modules/AIAgent/Services/Orchestrator.php` — Orchestrator multi-agent dengan `onProgress` callback
+- `resources/js/composables/useAsyncJob.ts` — Frontend polling composable
+
+**Progress Tracking:**
+| Phase | Progress | Description |
+|-------|----------|-------------|
+| Init | 5% | Job started, status = processing |
+| Schema built | 20% | Context + formatter siap |
+| Schema Agent | 25% | Agent pertama selesai |
+| Security Agent | 50% | Agent kedua selesai |
+| Monitoring Agent | 65% | Agent ketiga selesai |
+| Optimization Agent | 80% | Agent keempat selesai |
+| Persisting results | 80% | Data disimpan ke DB |
+| Complete | 100% | Status = completed |
+
+**Important note:** Doctrine DBAL's `listTables()` and `getIndexes()` return **associative arrays keyed by name** (e.g., `['PRIMARY' => IndexDTO, 'idx_email' => IndexDTO]`), not numerically-indexed. Always use `array_values()` before numeric access in agents.
+
+### 7.8 Checklist Phase 4
 
 - [x] AIRouter.php routing ke model (OpenAI, DeepSeek, Anthropic + rule-based fallback)
 - [x] SchemaAgent.php selesai (domain clustering, quality score)
@@ -670,6 +736,12 @@ ORDER BY sum_timer_wait DESC LIMIT 50;
 - [x] Slow query reader dari performance_schema
 - [x] EXPLAIN analyzer + visualizer selesai
 - [x] AI response di-cache di Redis (TTL: 30 menit)
+- [x] Async analysis job system via Laravel Queue (database driver)
+- [x] AIAnalysisJob update progress column incremental (5% → 100%)
+- [x] Orchestrator progress callback — onProgress callable per agent (25/50/65/80)
+- [x] useAsyncJob.ts frontend polling composable (interval 2 detik)
+- [x] Bug fix: OptimizationAgent crash — array_values() pada Doctrine DBAL associative index
+- [x] Bug fix: progress stuck di 0% — job tidak pernah update progress sebelumnya
 
 ---
 
