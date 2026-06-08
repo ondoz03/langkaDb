@@ -57,15 +57,23 @@ class Orchestrator
      *   metadata: array
      * }
      */
-    public function analyzeFull(SchemaContextDTO $context, ?string $apiKey = null, string $provider = 'rule'): array
+    public function analyzeFull(SchemaContextDTO $context, ?string $apiKey = null, string $provider = 'rule', ?callable $onProgress = null): array
     {
         $agentResults = [
             'schema' => $this->schemaAgent->analyze($context, $apiKey, $provider),
-            'security' => $this->securityAgent->analyze($context, $apiKey, $provider),
-            'monitoring' => $this->monitoringAgent->analyze($context, $apiKey, $provider),
-            'optimization' => $this->optimizationAgent->analyze($context, $apiKey, $provider),
-            'documentation' => $this->documentationAgent->analyze($context, $apiKey, $provider),
         ];
+        if ($onProgress) $onProgress(25);
+
+        $agentResults['security'] = $this->securityAgent->analyze($context, $apiKey, $provider);
+        if ($onProgress) $onProgress(50);
+
+        $agentResults['monitoring'] = $this->monitoringAgent->analyze($context, $apiKey, $provider);
+        if ($onProgress) $onProgress(65);
+
+        $agentResults['optimization'] = $this->optimizationAgent->analyze($context, $apiKey, $provider);
+        if ($onProgress) $onProgress(80);
+
+        $agentResults['documentation'] = $this->documentationAgent->analyze($context, $apiKey, $provider);
 
         // Aggregate findings and recommendations
         $allFindings = [];

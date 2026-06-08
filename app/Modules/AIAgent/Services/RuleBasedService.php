@@ -489,11 +489,13 @@ class RuleBasedService
 
         // Try to find tables array nested in the structure
         foreach ($schema as $key => $value) {
-            if (is_array($value) && isset($value[0]['name'])) {
-                return $value;
-            }
-            if (is_array($value) && isset($value['tables'])) {
-                return $value['tables'];
+            if (is_array($value)) {
+                if (array_is_list($value) && isset($value[0]['name'])) {
+                    return $value;
+                }
+                if (isset($value['tables'])) {
+                    return $value['tables'];
+                }
             }
         }
 

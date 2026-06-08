@@ -146,7 +146,7 @@ class OptimizationAgent implements AgentInterface
 
     private function detectDuplicateIndexes(TableDTO $table, array &$findings, array &$recommendations): void
     {
-        $indexes = $table->indexes;
+        $indexes = array_values($table->indexes);
         $count = count($indexes);
 
         if ($count < 2) {

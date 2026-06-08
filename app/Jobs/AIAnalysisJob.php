@@ -37,16 +37,12 @@ class AIAnalysisJob implements ShouldQueue
         SchemaFormatter $formatter,
     ): void {
         // Mark as processing
-        DB::table('ai_job_results')
-            ->where('id', $this->jobResultId)
-            ->update([
-                'status' => 'processing',
-                'updated_at' => now(),
-            ]);
+        $this->updateProgress(status: 'processing', progress: 5);
 
         try {
             $context = $contextBuilder->build($this->connectionId, 'database');
             $schemaCompact = $formatter->compact($context);
+            $this->updateProgress(progress: 20);
 
             $prompt = <<<PROMPT
 Analyze this database schema.
@@ -67,7 +63,11 @@ PROMPT;
 
             if ($this->provider === 'rule') {
                 // Use the multi-agent Orchestrator (zero-cost, rule-based)
-                $result = $orchestrator->analyzeFull($context);
+                $onProgress = fn (int $pct) => $this->updateProgress(progress: $pct);
+                $result = $orchestrator->analyzeFull(
+                    context: $context,
+                    onProgress: $onProgress,
+                );
                 $parsed = [
                     'findings' => $result['findings'] ?? [],
                     'recommendations' => $result['recommendations'] ?? [],
@@ -90,11 +90,13 @@ PROMPT;
             }
 
             $score = $parsed['score'] ?? 0;
+            $this->updateProgress(progress: 80);
 
             DB::table('ai_job_results')
                 ->where('id', $this->jobResultId)
                 ->update([
                     'status' => 'completed',
+                    'progress' => 100,
                     'result' => json_encode([
                         'findings' => $parsed['findings'] ?? [],
                         'recommendations' => $parsed['recommendations'] ?? [],
@@ -117,13 +119,10 @@ PROMPT;
                 'updated_at' => now(),
             ]);
         } catch (\Throwable $e) {
+            $this->updateProgress(status: 'failed', progress: 0);
             DB::table('ai_job_results')
                 ->where('id', $this->jobResultId)
-                ->update([
-                    'status' => 'failed',
-                    'error' => $e->getMessage(),
-                    'updated_at' => now(),
-                ]);
+                ->update(['error' => $e->getMessage()]);
         }
     }
 
@@ -187,5 +186,24 @@ PROMPT;
             'recommendations' => [],
             'score' => 0,
         ];
+    }
+
+    /**
+     * Update the progress and/or status of the job result record.
+     */
+    private function updateProgress(?string $status = null, ?int $progress = null): void
+    {
+        $data = [];
+        if ($status !== null) {
+            $data['status'] = $status;
+        }
+        if ($progress !== null) {
+            $data['progress'] = $progress;
+        }
+        $data['updated_at'] = now();
+
+        DB::table('ai_job_results')
+            ->where('id', $this->jobResultId)
+            ->update($data);
     }
 }
