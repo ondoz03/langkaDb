@@ -183,6 +183,7 @@ export function useGraph() {
     searchQuery,
     showOnlyConnected,
     loadSchema,
+    buildGraph,
     onNodeClick,
     closePanel,
     onViewportChange,
