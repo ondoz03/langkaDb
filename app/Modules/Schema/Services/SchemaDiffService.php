@@ -4,9 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Schema\Services;
 
-use App\Modules\Connection\Models\Connection;
 use App\Models\SchemaSnapshot;
-use App\Modules\Schema\DTOs\ColumnDTO;
+use App\Modules\Connection\Models\Connection;
 use App\Modules\Schema\DTOs\TableDTO;
 
 /**
@@ -46,13 +45,13 @@ class SchemaDiffService
 
         // Find new and modified tables
         foreach ($newTables as $name => $newTbl) {
-            if (!isset($oldTables[$name])) {
+            if (! isset($oldTables[$name])) {
                 $new[] = $newTbl;
             } else {
                 $colDiff = $this->computeColumnDiff($oldTables[$name], $newTbl);
                 $indexDiff = $this->computeIndexDiff($oldTables[$name], $newTbl);
 
-                if (!empty($colDiff) || !empty($indexDiff)) {
+                if (! empty($colDiff) || ! empty($indexDiff)) {
                     $modified[] = [
                         'table' => $newTbl->toArray(),
                         'column_changes' => $colDiff,
@@ -64,7 +63,7 @@ class SchemaDiffService
 
         // Find deleted tables (in old but not in new)
         foreach ($oldTables as $name => $oldTbl) {
-            if (!isset($newTables[$name])) {
+            if (! isset($newTables[$name])) {
                 $deleted[] = $oldTbl;
             }
         }
@@ -94,6 +93,7 @@ class SchemaDiffService
             $dto = $t instanceof TableDTO ? $t : TableDTO::fromArray($t);
             $indexed[$dto->name] = $dto;
         }
+
         return $indexed;
     }
 
@@ -116,7 +116,7 @@ class SchemaDiffService
 
         // Added columns
         foreach ($newCols as $name => $col) {
-            if (!isset($oldCols[$name])) {
+            if (! isset($oldCols[$name])) {
                 $changes[] = [
                     'type' => 'added',
                     'column' => $name,
@@ -127,7 +127,7 @@ class SchemaDiffService
 
         // Deleted columns
         foreach ($oldCols as $name => $col) {
-            if (!isset($newCols[$name])) {
+            if (! isset($newCols[$name])) {
                 $changes[] = [
                     'type' => 'deleted',
                     'column' => $name,
@@ -155,7 +155,7 @@ class SchemaDiffService
                     $diffs[] = ['field' => 'primary', 'from' => $oldCol->primary, 'to' => $col->primary];
                 }
 
-                if (!empty($diffs)) {
+                if (! empty($diffs)) {
                     $changes[] = [
                         'type' => 'modified',
                         'column' => $name,
@@ -186,13 +186,13 @@ class SchemaDiffService
         $changes = [];
 
         foreach ($newIdx as $name => $idx) {
-            if (!isset($oldIdx[$name])) {
+            if (! isset($oldIdx[$name])) {
                 $changes[] = ['type' => 'added', 'index' => $name, 'details' => $idx->toArray()];
             }
         }
 
         foreach ($oldIdx as $name => $idx) {
-            if (!isset($newIdx[$name])) {
+            if (! isset($newIdx[$name])) {
                 $changes[] = ['type' => 'deleted', 'index' => $name, 'details' => $idx->toArray()];
             }
         }

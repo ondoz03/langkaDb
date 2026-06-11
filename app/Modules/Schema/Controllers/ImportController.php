@@ -52,7 +52,7 @@ class ImportController extends Controller
                 ],
             ]);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Failed to parse SQL: ' . $e->getMessage()], 422);
+            return response()->json(['message' => 'Failed to parse SQL: '.$e->getMessage()], 422);
         }
     }
 }

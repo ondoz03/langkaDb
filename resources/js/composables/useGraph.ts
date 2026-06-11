@@ -50,6 +50,8 @@ interface SchemaResponse {
   summary: { total_tables: number; total_relations: number; total_indexes: number }
 }
 
+let saveTimer: ReturnType<typeof setTimeout> | null = null
+
 export function useGraph() {
   const schema = ref<SchemaResponse | null>(null)
   const nodes = ref<Node[]>([])
@@ -61,37 +63,125 @@ export function useGraph() {
   const viewport = ref<ViewportTransform>({ x: 0, y: 0, zoom: 0.6 })
   const searchQuery = ref('')
   const showOnlyConnected = ref(false)
+  const saving = ref(false)
 
   function getFilteredNodes() {
     let result: any[] = [...nodes.value]
-
     if (searchQuery.value) {
       const q = searchQuery.value.toLowerCase()
       result = result.filter((n: any) => (n.data as TableData)?.tableName?.toLowerCase().includes(q))
     }
-
     if (showOnlyConnected.value) {
       const connectedIds = new Set((edges.value as any[]).flatMap((e: any) => [e.source, e.target]))
       result = result.filter((n: any) => connectedIds.has(n.id))
     }
-
     return result as Node[]
+  }
+
+  async function loadPositions(connectionId: string): Promise<{
+    positions: Map<string, { x: number; y: number }>
+    customTables: TableData[]
+  } | null> {
+    try {
+      const res = await fetch(`/api/connections/${connectionId}/designer/diagrams`)
+      if (!res.ok) return null
+      const json = await res.json()
+      const diagrams = json.data ?? []
+      if (diagrams.length === 0) return null
+      const latest = diagrams[diagrams.length - 1]
+      const posMap = new Map<string, { x: number; y: number }>()
+      const customTables: TableData[] = []
+      for (const node of latest.nodes ?? []) {
+        posMap.set(node.table_name, { x: node.x_pos, y: node.y_pos })
+        if (node.metadata?.columns) {
+          customTables.push(node.metadata as TableData)
+        }
+      }
+      return { positions: posMap, customTables }
+    } catch {
+      return null
+    }
+  }
+
+  function savePositions(connectionId: string, nodeList: any[]) {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(async () => {
+      saving.value = true
+      try {
+        const nodesData = nodeList.map(n => ({
+          table_name: n.id,
+          x_pos: Math.round(n.position.x),
+          y_pos: Math.round(n.position.y),
+          metadata: (n.data as TableData) ?? null,
+        }))
+
+        const listRes = await fetch(`/api/connections/${connectionId}/designer/diagrams`)
+        const listJson = await listRes.json()
+        const diagrams = listJson.data ?? []
+        const diagramId = diagrams.length > 0 ? diagrams[diagrams.length - 1].id : null
+
+        if (diagramId) {
+          await fetch(`/api/designer/diagrams/${diagramId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              name: `Diagram - ${new Date().toLocaleDateString()}`,
+              connection_id: connectionId,
+              nodes: nodesData,
+              layout_data: { viewport: { x: 0, y: 0, zoom: 0.6 } },
+            }),
+          })
+        } else {
+          await fetch('/api/designer/diagrams', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              name: `Diagram - ${new Date().toLocaleDateString()}`,
+              connection_id: connectionId,
+              nodes: nodesData,
+            }),
+          })
+        }
+      } catch {
+        // silent — auto-save is best-effort
+      } finally {
+        saving.value = false
+      }
+    }, 2000)
   }
 
   async function loadSchema(connectionId: string) {
     loading.value = true
     error.value = null
-
     try {
-      const res = await fetch(`/api/connections/${connectionId}/schema`)
+      const [schemaRes, saved] = await Promise.all([
+        fetch(`/api/connections/${connectionId}/schema`),
+        loadPositions(connectionId),
+      ])
+      if (!schemaRes.ok) throw new Error('Failed to load schema')
+      const json = await schemaRes.json()
+      schema.value = json.data
 
-      if (!res.ok) {
-        throw new Error('Failed to load schema')
+      // Merge custom tables from saved diagram into schema data
+      const data = json.data as SchemaResponse
+      const existingNames = new Set(data.tables.map((t: SchemaTable) => t.name))
+      const customTables = saved?.customTables ?? []
+      for (const ct of customTables) {
+        if (!existingNames.has(ct.tableName)) {
+          data.tables.push({
+            name: ct.tableName,
+            columns: ct.columns,
+            indexes: ct.indexes ?? [],
+            row_count: ct.rowCount,
+            size_mb: ct.sizeKb / 1000,
+          })
+          existingNames.add(ct.tableName)
+        }
       }
 
-      const json = await res.json()
-      schema.value = json.data
-      buildGraph(json.data)
+      buildGraph(data, saved?.positions ?? null)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load schema'
     } finally {
@@ -99,7 +189,7 @@ export function useGraph() {
     }
   }
 
-  function buildGraph(data: SchemaResponse) {
+  function buildGraph(data: SchemaResponse, savedPositions?: Map<string, { x: number; y: number }> | null) {
     const graphNodes: Node[] = data.tables.map((table) => ({
       id: table.name,
       type: 'table',
@@ -117,9 +207,16 @@ export function useGraph() {
       data: { fromColumn: rel.from_column, toColumn: rel.to_column },
     }))
 
-    const laidOutNodes = applyDagreLayout(graphNodes, graphEdges)
-
-    nodes.value = laidOutNodes
+    if (savedPositions && savedPositions.size > 0) {
+      const laidOut = applyDagreLayout(graphNodes, graphEdges)
+      const merged = laidOut.map(n => {
+        const saved = savedPositions!.get(n.id)
+        return saved ? { ...n, position: saved } : n
+      })
+      nodes.value = merged
+    } else {
+      nodes.value = applyDagreLayout(graphNodes, graphEdges)
+    }
     edges.value = graphEdges
   }
 
@@ -135,19 +232,14 @@ export function useGraph() {
       const maxColName = cols.reduce((a: string, c: ColumnData) => (c.name.length > a.length ? c.name : a), '') ?? ''
       const width = Math.max(240, Math.min(400, maxColName.length * 8 + 100))
       const height = Math.max(80, 36 + colCount * 26)
-
       g.setNode(node.id, { width, height })
     })
 
-    edgeList.forEach((edge) => {
-      g.setEdge(edge.source, edge.target)
-    })
-
+    edgeList.forEach((edge) => g.setEdge(edge.source, edge.target))
     dagre.layout(g)
 
     return nodeList.map((node) => {
       const pos = g.node(node.id)
-
       return { ...node, position: { x: pos.x - 140, y: pos.y - 100 } }
     })
   }
@@ -165,9 +257,7 @@ export function useGraph() {
   }
 
   function rearrange() {
-    if (schema.value) {
-      buildGraph(schema.value)
-    }
+    if (schema.value) buildGraph(schema.value)
   }
 
   return {
@@ -176,6 +266,7 @@ export function useGraph() {
     edges,
     getFilteredNodes,
     loading,
+    saving,
     error,
     hoveredNode,
     selectedNode,
@@ -184,6 +275,7 @@ export function useGraph() {
     showOnlyConnected,
     loadSchema,
     buildGraph,
+    savePositions,
     onNodeClick,
     closePanel,
     onViewportChange,

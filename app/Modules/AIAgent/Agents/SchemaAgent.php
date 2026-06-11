@@ -79,7 +79,7 @@ PROMPT;
         }
 
         return [
-            'findings' => [['severity' => 'low', 'message' => 'AI: ' . mb_substr($response, 0, 150)]],
+            'findings' => [['severity' => 'low', 'message' => 'AI: '.mb_substr($response, 0, 150)]],
             'recommendations' => [['priority' => 'low', 'message' => 'AI analysis raw response shown above.']],
             'score' => 0,
             'clusters' => [],

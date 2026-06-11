@@ -6,6 +6,7 @@ namespace App\Modules\Connection\Services;
 
 use App\Modules\Connection\DTOs\ConnectionDTO;
 use App\Modules\Connection\Repositories\ConnectionRepository;
+use Doctrine\DBAL\DriverManager;
 
 class ConnectionService
 {
@@ -25,7 +26,7 @@ class ConnectionService
     {
         $connection = $this->repository->findById($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return null;
         }
 
@@ -47,7 +48,7 @@ class ConnectionService
             'ssh_host' => $data['ssh_host'] ?? null,
             'ssh_port' => $data['ssh_port'] ?? 22,
             'ssh_user' => $data['ssh_user'] ?? null,
-            'ssh_key' => !empty($data['ssh_key']) ? $this->encryptor->encrypt($data['ssh_key']) : null,
+            'ssh_key' => ! empty($data['ssh_key']) ? $this->encryptor->encrypt($data['ssh_key']) : null,
             'status' => 'disconnected',
         ]);
 
@@ -58,7 +59,7 @@ class ConnectionService
     {
         $connection = $this->repository->findById($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return null;
         }
 
@@ -76,11 +77,11 @@ class ConnectionService
             'ssh_user' => $data['ssh_user'] ?? $connection->ssh_user,
         ];
 
-        if (!empty($data['password'])) {
+        if (! empty($data['password'])) {
             $updateData['password'] = $this->encryptor->encrypt($data['password']);
         }
 
-        if (!empty($data['ssh_key'])) {
+        if (! empty($data['ssh_key'])) {
             $updateData['ssh_key'] = $this->encryptor->encrypt($data['ssh_key']);
         }
 
@@ -98,7 +99,7 @@ class ConnectionService
     {
         $connection = $this->repository->findById($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return ['success' => false, 'message' => 'Connection not found'];
         }
 
@@ -174,7 +175,7 @@ class ConnectionService
                 $config['sslmode'] = 'prefer';
             }
 
-            $conn = \Doctrine\DBAL\DriverManager::getConnection($config);
+            $conn = DriverManager::getConnection($config);
             $conn->executeQuery('SELECT 1');
 
             return ['success' => true, 'message' => 'Connection successful'];

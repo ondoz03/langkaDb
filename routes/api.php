@@ -8,6 +8,7 @@ use App\Modules\Schema\Controllers\ExportController;
 use App\Modules\Schema\Controllers\ImportController;
 use App\Modules\Schema\Controllers\SchemaController;
 use App\Modules\Schema\Controllers\SnapshotController;
+use App\Modules\Designer\Controllers\DesignerController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
@@ -62,4 +63,16 @@ Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
     Route::get('connections/{id}/ai/jobs', [AsyncJobController::class, 'index'])->name('api.connections.ai.jobs');
     Route::get('jobs/{jobId}/status', [AsyncJobController::class, 'status'])->name('api.jobs.status');
     Route::get('jobs/{jobId}/result', [AsyncJobController::class, 'result'])->name('api.jobs.result');
+
+    // AI Schema generation from natural language (Prompt to ERD)
+    Route::post('ai/generate-schema', [AIController::class, 'generateSchema'])->name('api.ai.generate-schema');
+
+    // Designer / Diagram routes
+    Route::get('designer/diagrams', [DesignerController::class, 'index'])->name('api.designer.diagrams.index');
+    Route::post('designer/diagrams', [DesignerController::class, 'store'])->name('api.designer.diagrams.store');
+    Route::get('designer/diagrams/{id}', [DesignerController::class, 'show'])->name('api.designer.diagrams.show');
+    Route::put('designer/diagrams/{id}', [DesignerController::class, 'update'])->name('api.designer.diagrams.update');
+    Route::delete('designer/diagrams/{id}', [DesignerController::class, 'destroy'])->name('api.designer.diagrams.destroy');
+    Route::get('connections/{connectionId}/designer/diagrams', [DesignerController::class, 'byConnection'])->name('api.connections.designer.diagrams');
+    Route::post('designer/save-layout', [DesignerController::class, 'saveLayout'])->name('api.designer.save-layout');
 });

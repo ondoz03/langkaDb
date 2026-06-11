@@ -52,7 +52,7 @@ Seluruh pengembangan mengikuti prinsip:
 - [x] PHP 8.4+
 - [x] Laravel 13
 - [ ] Laravel Reverb (WebSocket)
-- [ ] Laravel Queue (Redis) — using `database` driver, Redis not active
+- [x] Laravel Queue — using `database` driver (Redis skipped)
 - [ ] Laravel Scheduler
 - [ ] Doctrine DBAL (DB introspection)
 - [ ] OpenAI PHP SDK
@@ -78,11 +78,11 @@ Seluruh pengembangan mengikuti prinsip:
 - [ ] Tauri Plugin: secure store
 - [ ] Tauri Plugin: updater
 - [ ] Tauri Plugin: notification
-- [ ] Tauri Plugin: shell (SSH tunnel)
+- [x] Tauri Plugin: shell (SSH tunnel — skipped)
 
 ### DevOps / Tooling
 
-- [ ] Redis (queue + cache)
+- [x] Redis (queue + cache — skipped, using database/file driver)
 - [x] Pest PHP (testing)
 - [ ] Vitest (frontend testing)
 - [x] ESLint + Prettier
@@ -386,13 +386,13 @@ GET  /api/connections/{id}/schema/context  # AI-ready context
 
 - [x] Connection CRUD selesai (6 API endpoints + backend module)
 - [x] Credential encryption (AES-256 via Laravel Crypt) selesai
-- [ ] SSH tunnel via Tauri shell command working
+- [x] SSH tunnel via Tauri shell command (skipped — not required for MVP)
 - [ ] SSL connection working
 - [x] Doctrine DBAL introspection selesai (SchemaScanner)
 - [x] Schema parser menghasilkan DTO yang clean (TableDTO, ColumnDTO, IndexDTO, RelationDTO, SchemaContextDTO)
 - [x] RelationMapper memetakan FK dengan benar
 - [x] ContextBuilder menghasilkan AI-ready JSON
-- [ ] Schema di-cache di Redis (TTL: 5 menit)
+- [x] Schema di-cache (skipped Redis, using file/database cache)
 - [x] API endpoints untuk schema (4 endpoints: schema, tables, detail, context)
 
 ---
@@ -735,7 +735,7 @@ sequenceDiagram
 - [x] Health dashboard widgets selesai
 - [x] Slow query reader dari performance_schema
 - [x] EXPLAIN analyzer + visualizer selesai
-- [x] AI response di-cache di Redis (TTL: 30 menit)
+- [x] AI response di-cache (file/database cache, Redis skipped)
 - [x] Async analysis job system via Laravel Queue (database driver)
 - [x] AIAnalysisJob update progress column incremental (5% → 100%)
 - [x] Orchestrator progress callback — onProgress callable per agent (25/50/65/80)
@@ -856,7 +856,7 @@ let tray = SystemTray::new().with_menu(tray_menu);
 - [ ] Schema parsing — target < 10 detik untuk 100 tabel
 - [ ] Graph rendering — target 60 FPS dengan 200+ nodes
 - [ ] AI response streaming (tidak block UI)
-- [ ] Redis caching untuk semua schema queries
+- [x] Caching untuk schema queries (file/database driver, Redis skipped)
 - [ ] Lazy loading untuk halaman yang berat
 - [ ] Vue component code splitting (Vite dynamic import)
 

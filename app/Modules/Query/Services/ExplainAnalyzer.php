@@ -24,7 +24,7 @@ class ExplainAnalyzer
     {
         $connection = $this->connectionRepo->findById($connectionId);
 
-        if (!$connection) {
+        if (! $connection) {
             throw new \RuntimeException('Connection not found');
         }
 
@@ -54,11 +54,11 @@ class ExplainAnalyzer
         $conn = DriverManager::getConnection($config);
 
         try {
-            $explainSql = 'EXPLAIN FORMAT=JSON ' . $query;
+            $explainSql = 'EXPLAIN FORMAT=JSON '.$query;
             $stmt = $conn->executeQuery($explainSql);
             $row = $stmt->fetchAssociative();
 
-            if (!$row || !isset($row['EXPLAIN'])) {
+            if (! $row || ! isset($row['EXPLAIN'])) {
                 throw new \RuntimeException('EXPLAIN did not return expected JSON output');
             }
 
@@ -66,7 +66,7 @@ class ExplainAnalyzer
             $explainJson = json_decode($row['EXPLAIN'], true);
 
             if (json_last_error() !== JSON_ERROR_NONE) {
-                throw new \RuntimeException('Failed to parse EXPLAIN JSON: ' . json_last_error_msg());
+                throw new \RuntimeException('Failed to parse EXPLAIN JSON: '.json_last_error_msg());
             }
 
             $tree = $this->formatTree($explainJson);
@@ -96,7 +96,7 @@ class ExplainAnalyzer
     /**
      * Parse EXPLAIN FORMAT=JSON into a structured tree of ExplainNodeDTO.
      *
-     * @param array<string, mixed> $explainJson
+     * @param  array<string, mixed>  $explainJson
      * @return ExplainNodeDTO[]
      */
     public function formatTree(array $explainJson): array
@@ -116,9 +116,7 @@ class ExplainAnalyzer
     /**
      * Parse a single query_block.
      *
-     * @param array<string, mixed> $block
-     * @param string $prefix
-     * @return ExplainNodeDTO
+     * @param  array<string, mixed>  $block
      */
     private function parseQueryBlock(array $block, string $prefix): ExplainNodeDTO
     {
@@ -183,7 +181,7 @@ class ExplainAnalyzer
         return new ExplainNodeDTO(
             id: $nodeId,
             type: 'query_block',
-            table: !empty($tableNames) ? implode(', ', $tableNames) : null,
+            table: ! empty($tableNames) ? implode(', ', $tableNames) : null,
             cost: $totalCost,
             rows: (int) ($block['rows'] ?? 0),
             filtered: $this->parsePercentage($block['filtered'] ?? '100'),
@@ -203,9 +201,7 @@ class ExplainAnalyzer
     /**
      * Parse a nested_loop item (can be a table, another nested_loop, or a subquery).
      *
-     * @param array<string, mixed> $item
-     * @param string $prefix
-     * @return ExplainNodeDTO
+     * @param  array<string, mixed>  $item
      */
     private function parseNestedLoopItem(array $item, string $prefix): ExplainNodeDTO
     {
@@ -264,9 +260,7 @@ class ExplainAnalyzer
     /**
      * Parse a table node (leaf in the EXPLAIN tree).
      *
-     * @param array<string, mixed> $table
-     * @param string $prefix
-     * @return ExplainNodeDTO
+     * @param  array<string, mixed>  $table
      */
     private function parseTableNode(array $table, string $prefix): ExplainNodeDTO
     {
@@ -373,18 +367,18 @@ class ExplainAnalyzer
         ];
 
         foreach ($flags as $key => $label) {
-            if (!empty($table[$key])) {
+            if (! empty($table[$key])) {
                 $parts[] = $label;
             }
         }
 
-        return !empty($parts) ? implode('; ', $parts) : null;
+        return ! empty($parts) ? implode('; ', $parts) : null;
     }
 
     /**
      * Infer the overall access type for a query block from its children.
      *
-     * @param ExplainNodeDTO[] $children
+     * @param  ExplainNodeDTO[]  $children
      */
     private function inferQueryBlockAccessType(array $children): string
     {
@@ -411,7 +405,7 @@ class ExplainAnalyzer
     /**
      * Extract cost breakdown from the EXPLAIN JSON.
      *
-     * @param array<string, mixed> $explainJson
+     * @param  array<string, mixed>  $explainJson
      * @return array<string, mixed>
      */
     public function getCostBreakdown(array $explainJson): array
@@ -436,14 +430,15 @@ class ExplainAnalyzer
     /**
      * Recursively collect costs from the EXPLAIN tree.
      *
-     * @param array<string, mixed> $node
-     * @param array<string, mixed> $breakdown
+     * @param  array<string, mixed>  $node
+     * @param  array<string, mixed>  $breakdown
      */
     private function collectCosts(array $node, array &$breakdown): void
     {
         // Handle query_block
         if (isset($node['query_block'])) {
             $this->collectCosts($node['query_block'], $breakdown);
+
             return;
         }
 
@@ -472,7 +467,7 @@ class ExplainAnalyzer
                     'data_read_per_join' => $costInfo['data_read_per_join'] ?? null,
                 ],
                 'key' => $node['key'] ?? null,
-                'using_index' => !empty($node['using_index']),
+                'using_index' => ! empty($node['using_index']),
             ];
 
             $breakdown['operations'][] = [
@@ -528,7 +523,6 @@ class ExplainAnalyzer
     /**
      * Generate optimization suggestions based on the EXPLAIN analysis.
      *
-     * @param ExplainResultDTO $result
      * @return string[]
      */
     public function suggestOptimizations(ExplainResultDTO $result): array
@@ -544,7 +538,7 @@ class ExplainAnalyzer
 
         // Enrich with cost context
         if ($result->costBreakdown['total_query_cost'] > 1000) {
-            array_unshift($suggestions, '⚠ High query cost (' . round($result->costBreakdown['total_query_cost'], 2) . '). Consider query optimization.');
+            array_unshift($suggestions, '⚠ High query cost ('.round($result->costBreakdown['total_query_cost'], 2).'). Consider query optimization.');
         }
 
         return $suggestions;
@@ -553,8 +547,7 @@ class ExplainAnalyzer
     /**
      * Recursively collect optimization suggestions from the tree.
      *
-     * @param ExplainNodeDTO $node
-     * @param string[] $suggestions
+     * @param  string[]  $suggestions
      */
     private function collectSuggestions(ExplainNodeDTO $node, array &$suggestions): void
     {
@@ -587,7 +580,7 @@ class ExplainAnalyzer
 
         // Check for temporary table
         if ($node->extra && str_contains($node->extra, 'Using temporary')) {
-            $suggestions[] = "Using temporary table — optimize GROUP BY or DISTINCT with appropriate indexes.";
+            $suggestions[] = 'Using temporary table — optimize GROUP BY or DISTINCT with appropriate indexes.';
         }
 
         // Check for full table scan with high row count

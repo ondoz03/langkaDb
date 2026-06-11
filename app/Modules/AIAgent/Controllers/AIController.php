@@ -9,8 +9,10 @@ use App\Modules\AIAgent\Services\AICacheService;
 use App\Modules\AIAgent\Services\AIRouter;
 use App\Modules\AIAgent\Services\Orchestrator;
 use App\Modules\Connection\Models\Connection;
+use App\Modules\Connection\Services\ConnectionEncryptor;
 use App\Modules\Schema\Services\ContextBuilder;
 use App\Modules\Schema\Services\SchemaFormatter;
+use Doctrine\DBAL\DriverManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -198,7 +200,7 @@ class AIController extends Controller
             $apiKey = $request->input('api_key') ?? env('OPENAI_API_KEY') ?? '';
             $provider = $request->input('provider', 'openai');
 
-            $connection = \App\Modules\Connection\Models\Connection::find($id);
+            $connection = Connection::find($id);
             $dbInfo = '';
 
             if ($connection) {
@@ -211,7 +213,7 @@ class AIController extends Controller
                     $allTableNames = array_map(fn ($t) => $t->name, $context->tables);
 
                     // Show ALL table names (cheap - just names)
-                    $dbInfo .= "\nSemua tabel: " . implode(', ', $allTableNames);
+                    $dbInfo .= "\nSemua tabel: ".implode(', ', $allTableNames);
 
                     // Column details for first 15 tables only
                     $detailTables = array_slice($context->tables, 0, 15);
@@ -222,7 +224,7 @@ class AIController extends Controller
                         foreach ($table->columns as $col) {
                             $colNames[] = $col->name;
                         }
-                        $dbInfo .= "\n- {$table->name}(" . implode(', ', $colNames) . ')';
+                        $dbInfo .= "\n- {$table->name}(".implode(', ', $colNames).')';
                     }
 
                     if (count($context->tables) > 15) {
@@ -245,7 +247,7 @@ class AIController extends Controller
             foreach ($recentHistory as $msg) {
                 $content = $msg['content'] ?? '';
                 if (mb_strlen($content) > 500) {
-                    $content = mb_substr($content, 0, 500) . '...';
+                    $content = mb_substr($content, 0, 500).'...';
                 }
                 $aiMessages[] = [
                     'role' => $msg['role'] ?? 'user',
@@ -291,7 +293,7 @@ class AIController extends Controller
 
     private function processToolCalls(string $response, string $connectionId, string $systemPrompt, string $apiKey, string $provider): string
     {
-        if (!preg_match('/\[QUERY\]([\s\S]*?)\[\/QUERY\]/', $response, $matches)) {
+        if (! preg_match('/\[QUERY\]([\s\S]*?)\[\/QUERY\]/', $response, $matches)) {
             return $response;
         }
 
@@ -311,18 +313,18 @@ class AIController extends Controller
             }
         }
 
-        if (!$isReadOnly) {
-            return $textBefore . "\n\n{$sqlBlock}\n\n⚠️ *Query ini tidak dijalankan otomatis. Jalankan manual jika yakin.*";
+        if (! $isReadOnly) {
+            return $textBefore."\n\n{$sqlBlock}\n\n⚠️ *Query ini tidak dijalankan otomatis. Jalankan manual jika yakin.*";
         }
 
-        $connection = \App\Modules\Connection\Models\Connection::find($connectionId);
+        $connection = Connection::find($connectionId);
 
-        if (!$connection) {
-            return $textBefore . "\n\n{$sqlBlock}\n\n*(Koneksi tidak ditemukan)*";
+        if (! $connection) {
+            return $textBefore."\n\n{$sqlBlock}\n\n*(Koneksi tidak ditemukan)*";
         }
 
         $driverMap = ['mysql' => 'pdo_mysql', 'mariadb' => 'pdo_mysql'];
-        $encryptor = app(\App\Modules\Connection\Services\ConnectionEncryptor::class);
+        $encryptor = app(ConnectionEncryptor::class);
 
         $config = [
             'driver' => $driverMap[$connection->driver] ?? 'pdo_mysql',
@@ -347,24 +349,24 @@ class AIController extends Controller
         }
 
         try {
-            $conn = \Doctrine\DBAL\DriverManager::getConnection($config);
+            $conn = DriverManager::getConnection($config);
             $stmt = $conn->executeQuery($sql);
             $rows = $stmt->fetchAllAssociative();
-            $columns = !empty($rows) ? array_keys($rows[0]) : [];
+            $columns = ! empty($rows) ? array_keys($rows[0]) : [];
             $count = count($rows);
             $displayRows = array_slice($rows, 0, 15);
 
-            $header = '| ' . implode(' | ', $columns) . ' |';
-            $separator = '| ' . implode(' | ', array_fill(0, count($columns), '---')) . ' |';
-            $dataRows = array_map(fn ($row) => '| ' . implode(' | ', array_map(fn ($col) => $row[$col] ?? 'NULL', $columns)) . ' |', $displayRows);
-            $table = "[Hasil: {$count} baris]\n\n{$header}\n{$separator}\n" . implode("\n", $dataRows);
+            $header = '| '.implode(' | ', $columns).' |';
+            $separator = '| '.implode(' | ', array_fill(0, count($columns), '---')).' |';
+            $dataRows = array_map(fn ($row) => '| '.implode(' | ', array_map(fn ($col) => $row[$col] ?? 'NULL', $columns)).' |', $displayRows);
+            $table = "[Hasil: {$count} baris]\n\n{$header}\n{$separator}\n".implode("\n", $dataRows);
 
             $resultBlock = "```\n{$table}\n```";
         } catch (\Throwable $e) {
             $resultBlock = "```\nError: {$e->getMessage()}\n```";
         }
 
-        return $textBefore . "\n\n{$sqlBlock}\n\n{$resultBlock}";
+        return $textBefore."\n\n{$sqlBlock}\n\n{$resultBlock}";
     }
 
     public function listChatHistory(string $id): JsonResponse
@@ -413,21 +415,21 @@ class AIController extends Controller
         // Build AI messages array with schema context
         $aiMessages = [['role' => 'system', 'content' => $systemPrompt]];
 
-        $connection = \App\Modules\Connection\Models\Connection::find($id);
+        $connection = Connection::find($id);
         $dbInfo = '';
 
         if ($connection) {
             $dbInfo = "Terhubung ke: {$connection->name} ({$connection->driver})";
             try {
                 $context = $this->contextBuilder->build($id, 'database');
-                $allTableNames = array_map(fn($t) => $t->name, $context->tables);
-                $dbInfo .= "\nSemua tabel: " . implode(', ', $allTableNames);
+                $allTableNames = array_map(fn ($t) => $t->name, $context->tables);
+                $dbInfo .= "\nSemua tabel: ".implode(', ', $allTableNames);
 
                 $detailTables = array_slice($context->tables, 0, 15);
                 $dbInfo .= "\n\nDetail kolom:";
                 foreach ($detailTables as $table) {
-                    $colNames = array_map(fn($c) => $c->name, $table->columns);
-                    $dbInfo .= "\n- {$table->name}(" . implode(', ', $colNames) . ')';
+                    $colNames = array_map(fn ($c) => $c->name, $table->columns);
+                    $dbInfo .= "\n- {$table->name}(".implode(', ', $colNames).')';
                 }
             } catch (\Throwable $e) {
                 $dbInfo .= "\n(Gunakan [QUERY]SHOW TABLES[/QUERY] untuk lihat tabel)";
@@ -442,7 +444,7 @@ class AIController extends Controller
         foreach ($recentHistory as $msg) {
             $content = $msg['content'] ?? '';
             if (mb_strlen($content) > 500) {
-                $content = mb_substr($content, 0, 500) . '...';
+                $content = mb_substr($content, 0, 500).'...';
             }
             $aiMessages[] = ['role' => $msg['role'] ?? 'user', 'content' => $content];
         }
@@ -462,7 +464,7 @@ class AIController extends Controller
                 CURLOPT_POST => true,
                 CURLOPT_HTTPHEADER => [
                     'Content-Type: application/json',
-                    'Authorization: Bearer ' . $apiKey,
+                    'Authorization: Bearer '.$apiKey,
                 ],
                 CURLOPT_POSTFIELDS => json_encode([
                     'model' => $provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o-mini',
@@ -475,19 +477,22 @@ class AIController extends Controller
                     $lines = explode("\n", $data);
                     foreach ($lines as $line) {
                         $line = trim($line);
-                        if (empty($line) || $line === 'data: [DONE]') continue;
+                        if (empty($line) || $line === 'data: [DONE]') {
+                            continue;
+                        }
                         if (str_starts_with($line, 'data: ')) {
                             $json = substr($line, 6);
                             $parsed = json_decode($json, true);
                             $delta = $parsed['choices'][0]['delta']['content'] ?? '';
                             if ($delta) {
                                 $fullResponse .= $delta;
-                                echo "data: " . json_encode(['type' => 'chunk', 'content' => $delta]) . "\n\n";
+                                echo 'data: '.json_encode(['type' => 'chunk', 'content' => $delta])."\n\n";
                                 ob_flush();
                                 flush();
                             }
                         }
                     }
+
                     return strlen($data);
                 },
             ]);
@@ -497,13 +502,13 @@ class AIController extends Controller
             curl_close($ch);
 
             if ($httpCode !== 200) {
-                echo "data: " . json_encode(['type' => 'error', 'message' => "API error (HTTP {$httpCode})"]) . "\n\n";
+                echo 'data: '.json_encode(['type' => 'error', 'message' => "API error (HTTP {$httpCode})"])."\n\n";
                 ob_flush();
                 flush();
             } elseif ($fullResponse) {
                 // Save to chat history
                 try {
-                    \Illuminate\Support\Facades\DB::table('ai_chat_history')->insert([
+                    DB::table('ai_chat_history')->insert([
                         'connection_id' => $id,
                         'connection_name' => $connectionName,
                         'provider' => $provider,
@@ -516,7 +521,7 @@ class AIController extends Controller
                     // Non-blocking — don't fail the stream for DB error
                 }
 
-                echo "data: " . json_encode(['type' => 'done', 'content' => $fullResponse]) . "\n\n";
+                echo 'data: '.json_encode(['type' => 'done', 'content' => $fullResponse])."\n\n";
                 ob_flush();
                 flush();
             }
@@ -531,20 +536,26 @@ class AIController extends Controller
     {
         $data = json_decode($response, true);
 
-        if ($data) return $data;
+        if ($data) {
+            return $data;
+        }
 
         if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $response, $m)) {
             $data = json_decode($m[1], true);
-            if ($data) return $data;
+            if ($data) {
+                return $data;
+            }
         }
 
         if (preg_match('/\{[^{}]*\}/s', $response, $m)) {
             $data = json_decode($m[0], true);
-            if ($data) return $data;
+            if ($data) {
+                return $data;
+            }
         }
 
         return [
-            'findings' => [['severity' => 'low', 'message' => 'AI response could not be parsed. Raw: ' . mb_substr($response, 0, 200)]],
+            'findings' => [['severity' => 'low', 'message' => 'AI response could not be parsed. Raw: '.mb_substr($response, 0, 200)]],
             'recommendations' => [],
             'score' => 0,
         ];
@@ -552,7 +563,7 @@ class AIController extends Controller
 
     private function buildSystemPrompt(?string $customPrompt = ''): string
     {
-        $default = <<<PROMPT
+        $default = <<<'PROMPT'
 Kamu adalah database expert. Jawab dalam Bahasa Indonesia.
 
 Kamu adalah database expert. Jawab dalam Bahasa Indonesia.
@@ -567,7 +578,7 @@ Untuk menampilkan data/analisis:
 PROMPT;
 
         if (trim($customPrompt)) {
-            return $default . "\n\nAdditional instructions:\n" . $customPrompt;
+            return $default."\n\nAdditional instructions:\n".$customPrompt;
         }
 
         return $default;
@@ -597,7 +608,7 @@ PROMPT;
                     ->where('created_at', '>=', now()->subHours(24))
                     ->count();
             } catch (\Throwable $e) {
-                Log::warning('Monitoring: stats query error: ' . $e->getMessage());
+                Log::warning('Monitoring: stats query error: '.$e->getMessage());
             }
 
             $healthScores = [];
@@ -614,7 +625,7 @@ PROMPT;
                 }
             }
 
-            $avgHealthScore = !empty($healthScores)
+            $avgHealthScore = ! empty($healthScores)
                 ? round(array_sum($healthScores) / count($healthScores), 1)
                 : 0;
 
@@ -629,7 +640,7 @@ PROMPT;
                     'total_queries_24h' => $totalQueries,
                     'avg_health_score' => $avgHealthScore,
                     'avg_health_grade' => $this->gradeScore($avgHealthScore),
-                    'connections' => $connections->map(fn($c) => [
+                    'connections' => $connections->map(fn ($c) => [
                         'id' => $c->id,
                         'name' => $c->name,
                         'driver' => $c->driver,
@@ -643,7 +654,8 @@ PROMPT;
                 ],
             ]);
         } catch (\Throwable $e) {
-            Log::error('Monitoring stats error: ' . $e->getMessage());
+            Log::error('Monitoring stats error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch monitoring stats',
@@ -682,14 +694,15 @@ PROMPT;
                 }
             }
 
-            usort($alerts, fn($a, $b) => ($a['severity'] === 'high' ? 0 : 1) <=> ($b['severity'] === 'high' ? 0 : 1));
+            usort($alerts, fn ($a, $b) => ($a['severity'] === 'high' ? 0 : 1) <=> ($b['severity'] === 'high' ? 0 : 1));
 
             return response()->json([
                 'success' => true,
                 'data' => array_slice($alerts, 0, 10),
             ]);
         } catch (\Throwable $e) {
-            Log::error('Monitoring alerts error: ' . $e->getMessage());
+            Log::error('Monitoring alerts error: '.$e->getMessage());
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch alerts',
@@ -707,5 +720,193 @@ PROMPT;
             default => 'F',
         };
     }
+
+    /**
+     * Generate CREATE TABLE SQL from a natural language prompt.
+     * Used by the "Prompt to ERD" feature.
+     */
+    public function generateSchema(Request $request): JsonResponse
+    {
+        $request->validate([
+            'prompt' => 'required|string|min:10|max:2000',
+            'provider' => 'nullable|string',
+            'api_key' => 'nullable|string',
+        ]);
+
+        try {
+            $prompt = $request->input('prompt');
+            $provider = $request->input('provider', 'rule');
+            $apiKey = $request->input('api_key');
+
+            $systemPrompt = <<<'PROMPT'
+You are AetherDB AI, a database schema designer.
+Given a natural language description of a database, generate valid MySQL CREATE TABLE statements.
+Follow these rules:
+- Use InnoDB engine
+- Use appropriate data types (INT, VARCHAR, TEXT, DECIMAL, DATETIME, etc.)
+- Include primary keys, foreign keys, and indexes
+- Use proper naming conventions (snake_case)
+- Output ONLY valid SQL, no explanations
+- Each CREATE TABLE must end with a semicolon
+- Include at least one foreign key relationship
+PROMPT;
+
+            $userPrompt = "Design a MySQL database schema for: {$prompt}\n\nGenerate the CREATE TABLE statements:";
+
+            $result = $this->router->route(
+                task: 'schema_generation',
+                prompt: $userPrompt,
+                systemPrompt: $systemPrompt,
+                apiKey: $apiKey,
+                provider: $provider,
+            );
+
+            // If AI returned empty or no SQL, provide fallback from rule-based
+            if (empty($result) || ! str_contains(strtoupper($result), 'CREATE TABLE')) {
+                $result = $this->generateFallbackSchema($prompt);
+            }
+
+            // Parse the generated SQL to extract table names
+            preg_match_all('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`?(\w+)`?)/i', $result, $tableMatches);
+            $tableNames = array_filter($tableMatches[1] ?? []);
+
+            return response()->json([
+                'data' => [
+                    'sql' => $result,
+                    'tables' => array_values(array_unique($tableNames)),
+                    'prompt' => $prompt,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('AI generateSchema failed', [
+                'error' => $e->getMessage(),
+                'prompt' => $request->input('prompt'),
+            ]);
+
+            // Fallback: generate a basic schema
+            $fallback = $this->generateFallbackSchema($request->input('prompt', ''));
+
+            preg_match_all('/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`?(\w+)`?)/i', $fallback, $tableMatches);
+            $tableNames = array_filter($tableMatches[1] ?? []);
+
+            return response()->json([
+                'data' => [
+                    'sql' => $fallback,
+                    'tables' => array_values(array_unique($tableNames)),
+                    'prompt' => $request->input('prompt'),
+                    'fallback' => true,
+                ],
+            ]);
+        }
+    }
+
+    /**
+     * Generate a basic schema as fallback when AI is unavailable.
+     */
+    private function generateFallbackSchema(string $prompt): string
+    {
+        $keywords = strtolower($prompt);
+        $tables = [];
+
+        // Detect common domain keywords
+        if (str_contains($keywords, 'user') || str_contains($keywords, 'customer') || str_contains($keywords, 'member')) {
+            $tables[] = <<<'SQL'
+CREATE TABLE users (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        if (str_contains($keywords, 'product') || str_contains($keywords, 'item') || str_contains($keywords, 'inventory') || str_contains($keywords, 'shop')) {
+            $tables[] = <<<'SQL'
+CREATE TABLE products (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    price DECIMAL(12, 2) NOT NULL,
+    stock INT UNSIGNED DEFAULT 0,
+    status ENUM('active', 'inactive') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        if (str_contains($keywords, 'order') || str_contains($keywords, 'transaction') || str_contains($keywords, 'purchase')) {
+            $tables[] = <<<'SQL'
+CREATE TABLE orders (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    total DECIMAL(12, 2) NOT NULL,
+    status ENUM('pending', 'processing', 'completed', 'cancelled') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        if (str_contains($keywords, 'category')) {
+            $tables[] = <<<'SQL'
+CREATE TABLE categories (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    parent_id BIGINT UNSIGNED DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES categories(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        if (str_contains($keywords, 'blog') || str_contains($keywords, 'post') || str_contains($keywords, 'article')) {
+            $tables[] = <<<'SQL'
+CREATE TABLE posts (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT,
+    published_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        if (str_contains($keywords, 'payment') || str_contains($keywords, 'invoice') || str_contains($keywords, 'bill')) {
+            $tables[] = <<<'SQL'
+CREATE TABLE payments (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    order_id BIGINT UNSIGNED NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL,
+    method ENUM('credit_card', 'bank_transfer', 'e_wallet') DEFAULT 'bank_transfer',
+    status ENUM('pending', 'success', 'failed') DEFAULT 'pending',
+    paid_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        if (empty($tables)) {
+            $tables[] = <<<'SQL'
+CREATE TABLE items (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+SQL;
+        }
+
+        return implode("\n\n", $tables);
+    }
 }
-   

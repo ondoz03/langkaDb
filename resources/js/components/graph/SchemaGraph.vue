@@ -25,6 +25,7 @@ const emit = defineEmits<{
   (e: 'node-click', node: Node): void
   (e: 'node-enter', nodeId: string): void
   (e: 'node-leave'): void
+  (e: 'node-drag-stop', node: Node): void
   (e: 'viewport-change', viewport: { x: number; y: number; zoom: number }): void
 }>()
 </script>
@@ -49,6 +50,7 @@ const emit = defineEmits<{
       @node-click="emit('node-click', $event.node)"
       @node-enter="emit('node-enter', $event.node.id)"
       @node-leave="emit('node-leave')"
+      @node-drag-stop="emit('node-drag-stop', $event.node)"
       @viewport-change="emit('viewport-change', { x: $event.x, y: $event.y, zoom: $event.zoom })"
     >
       <Background :gap="24" pattern-color="#262626" />

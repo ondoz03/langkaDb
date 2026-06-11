@@ -11,6 +11,7 @@ use App\Modules\AIAgent\DTOs\DocResultDTO;
 use App\Modules\AIAgent\DTOs\TableDocumentationDTO;
 use App\Modules\AIAgent\Prompts\DocumentationPrompt;
 use App\Modules\AIAgent\Services\AIRouter;
+use App\Modules\Schema\DTOs\ColumnDTO;
 use App\Modules\Schema\DTOs\RelationDTO;
 use App\Modules\Schema\DTOs\SchemaContextDTO;
 use App\Modules\Schema\DTOs\TableDTO;
@@ -50,7 +51,7 @@ class DocumentationAgent implements AgentInterface
             agent: 'documentation',
             findings: $findings,
             recommendations: [
-                ['priority' => 'low', 'message' => 'Data dictionary generated with ' . $dictionary->totalTables . ' tables and ' . $dictionary->totalColumns . ' columns.'],
+                ['priority' => 'low', 'message' => 'Data dictionary generated with '.$dictionary->totalTables.' tables and '.$dictionary->totalColumns.' columns.'],
                 ['priority' => 'low', 'message' => 'Export available in Markdown and JSON formats.'],
             ],
             score: $dictionary->totalTables > 0 ? 100 : 0,
@@ -103,7 +104,7 @@ class DocumentationAgent implements AgentInterface
             );
 
             $domain = $aiData['domain'] ?? $this->inferDomain($table);
-            if (!in_array($domain, $domains, true)) {
+            if (! in_array($domain, $domains, true)) {
                 $domains[] = $domain;
             }
         }
@@ -167,13 +168,13 @@ class DocumentationAgent implements AgentInterface
     {
         $data = json_decode($response, true);
 
-        if (!$data) {
+        if (! $data) {
             if (preg_match('/```(?:json)?\s*(\{.*?\})\s*```/s', $response, $m)) {
                 $data = json_decode($m[1], true);
             }
         }
 
-        if (!$data) {
+        if (! $data) {
             if (preg_match('/\{[^{}]*\}/s', $response, $m)) {
                 $data = json_decode($m[0], true);
             }
@@ -195,7 +196,7 @@ class DocumentationAgent implements AgentInterface
     /**
      * Build ColumnDocumentationDTO array from a table's columns and AI data
      *
-     * @param \App\Modules\Schema\DTOs\ColumnDTO[] $schemaColumns
+     * @param  ColumnDTO[]  $schemaColumns
      */
     private function buildColumnDocs(TableDTO $table, array $aiColumnData): array
     {
@@ -267,19 +268,19 @@ class DocumentationAgent implements AgentInterface
 
         $hasTimestamps = in_array('created_at', $colNames) || in_array('updated_at', $colNames);
         $hasDeleted = in_array('deleted_at', $colNames);
-        $hasForeignKeys = in_array('user_id', $colNames) || in_array('id_' . $table->name, $colNames);
+        $hasForeignKeys = in_array('user_id', $colNames) || in_array('id_'.$table->name, $colNames);
 
         $parts = ["Table `{$table->name}`"];
         if ($primaryKey) {
             $parts[] = "primary key: `{$primaryKey}`";
         }
-        $parts[] = count($table->columns) . ' columns';
+        $parts[] = count($table->columns).' columns';
         if ($hasTimestamps) {
             $parts[] = 'with timestamps';
         }
-        $parts[] = '~' . $table->rowCount . ' rows';
+        $parts[] = '~'.$table->rowCount.' rows';
 
-        return implode(', ', $parts) . '.';
+        return implode(', ', $parts).'.';
     }
 
     /**

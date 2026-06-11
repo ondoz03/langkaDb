@@ -166,7 +166,7 @@ class MonitoringAgent implements AgentInterface
     /**
      * Analyze performance from raw metric snapshots.
      *
-     * @param array $metrics Array of metric snapshots, each with qps, latency_ms, connection_count, measured_at
+     * @param  array  $metrics  Array of metric snapshots, each with qps, latency_ms, connection_count, measured_at
      */
     public function analyzePerformance(array $metrics): MonitorReportDTO
     {
@@ -301,7 +301,7 @@ class MonitoringAgent implements AgentInterface
     /**
      * Detect anomalies from historical metric data.
      *
-     * @param array $history Array of snapshots, each containing qps, latency_ms, connection_count
+     * @param  array  $history  Array of snapshots, each containing qps, latency_ms, connection_count
      * @return array<AnomalyDTO>
      */
     public function detectAnomalies(array $history): array
@@ -333,7 +333,7 @@ class MonitoringAgent implements AgentInterface
                 $anomalies[] = new AnomalyDTO(
                     type: 'latency_spike',
                     severity: 'high',
-                    message: "Latency spike detected at index {$i}: {$latency}ms (mean: " . round($latencyMean, 2) . "ms)",
+                    message: "Latency spike detected at index {$i}: {$latency}ms (mean: ".round($latencyMean, 2).'ms)',
                     context: [
                         'index' => $i,
                         'value' => $latency,
@@ -351,7 +351,7 @@ class MonitoringAgent implements AgentInterface
                 $anomalies[] = new AnomalyDTO(
                     type: 'connection_growth',
                     severity: 'medium',
-                    message: "Connection count jumped by {$growth} between snapshot " . ($i - 1) . " and {$i}.",
+                    message: "Connection count jumped by {$growth} between snapshot ".($i - 1)." and {$i}.",
                     context: [
                         'from' => $connections[$i - 1],
                         'to' => $connections[$i],
@@ -369,7 +369,7 @@ class MonitoringAgent implements AgentInterface
                     $anomalies[] = new AnomalyDTO(
                         type: 'qps_drop',
                         severity: 'high',
-                        message: "QPS dropped by " . round($dropRatio * 100) . "% between snapshots.",
+                        message: 'QPS dropped by '.round($dropRatio * 100).'% between snapshots.',
                         context: [
                             'from' => $qpsValues[$i - 1],
                             'to' => $qpsValues[$i],

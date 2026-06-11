@@ -30,7 +30,7 @@ class SlowQueryReader
         try {
             $connection = $this->connectionRepo->findById($connectionId);
 
-            if (!$connection) {
+            if (! $connection) {
                 $this->safeLog(fn () => Log::warning('SlowQueryReader: Connection not found', ['connection_id' => $connectionId]));
 
                 return [];
@@ -52,7 +52,7 @@ class SlowQueryReader
                 WHERE DIGEST IS NOT NULL
                 GROUP BY DIGEST, DIGEST_TEXT
                 ORDER BY SUM_TIMER_WAIT DESC
-                LIMIT ' . self::DEFAULT_LIMIT;
+                LIMIT '.self::DEFAULT_LIMIT;
 
             $rows = $conn->executeQuery($sql)->fetchAllAssociative();
 
@@ -86,7 +86,7 @@ class SlowQueryReader
      */
     public function readFromSlowLog(string $connectionId, string $logPath): array
     {
-        if (!file_exists($logPath) || !is_readable($logPath)) {
+        if (! file_exists($logPath) || ! is_readable($logPath)) {
             $this->safeLog(fn () => Log::warning('SlowQueryReader: Slow log file not found or unreadable', [
                 'connection_id' => $connectionId,
                 'log_path' => $logPath,
@@ -117,7 +117,7 @@ class SlowQueryReader
     /**
      * Analyze slow queries with schema context.
      *
-     * @param array<int, SlowQueryDTO> $queries
+     * @param  array<int, SlowQueryDTO>  $queries
      * @return array<int, array<string, mixed>>
      */
     public function analyzeSlowQueries(array $queries, SchemaContextDTO $context): array
@@ -228,8 +228,8 @@ class SlowQueryReader
                 $currentEntry['query_time'] = (float) $m[1];
                 $currentEntry['lock_time'] = (float) $m[2];
                 $currentEntry['rows_examined'] = (int) $m[3];
-            } elseif ($currentEntry !== null && !str_starts_with($line, '#') && trim($line) !== '') {
-                $currentSql .= $line . "\n";
+            } elseif ($currentEntry !== null && ! str_starts_with($line, '#') && trim($line) !== '') {
+                $currentSql .= $line."\n";
             }
         }
 
@@ -248,7 +248,7 @@ class SlowQueryReader
     private function buildDtoFromSlowLogEntry(array $entry): SlowQueryDTO
     {
         $queryText = $entry['sql_text'] ?? '';
-        $digest = 'slow_log_' . md5($queryText);
+        $digest = 'slow_log_'.md5($queryText);
 
         return new SlowQueryDTO(
             digest: $digest,
@@ -263,7 +263,7 @@ class SlowQueryReader
     /**
      * Find table names referenced in a query.
      *
-     * @param array<int, string> $tableNames
+     * @param  array<int, string>  $tableNames
      * @return array<int, string>
      */
     private function findReferencedTables(string $queryText, array $tableNames): array
@@ -273,7 +273,7 @@ class SlowQueryReader
         foreach ($tableNames as $table) {
             $quoted = preg_quote($table, '/');
 
-            if (preg_match('/\b' . $quoted . '\b/i', $queryText)) {
+            if (preg_match('/\b'.$quoted.'\b/i', $queryText)) {
                 $matched[] = $table;
             }
         }
@@ -284,7 +284,7 @@ class SlowQueryReader
     /**
      * Generate a human-readable suggestion based on slow query analysis.
      *
-     * @param array<int, string> $matchedTables
+     * @param  array<int, string>  $matchedTables
      */
     private function generateSuggestion(SlowQueryDTO $query, array $matchedTables): string
     {
@@ -302,11 +302,11 @@ class SlowQueryReader
             $suggestions[] = sprintf('High frequency (%d executions) — consider caching or reducing calls', $query->frequency);
         }
 
-        if (!empty($matchedTables)) {
-            $suggestions[] = 'Referenced tables: ' . implode(', ', $matchedTables);
+        if (! empty($matchedTables)) {
+            $suggestions[] = 'Referenced tables: '.implode(', ', $matchedTables);
         }
 
-        return !empty($suggestions)
+        return ! empty($suggestions)
             ? implode('; ', $suggestions)
             : 'No optimization suggestions';
     }

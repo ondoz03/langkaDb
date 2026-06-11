@@ -8,6 +8,7 @@ use App\Modules\Schema\DTOs\ColumnDTO;
 use App\Modules\Schema\DTOs\IndexDTO;
 use App\Modules\Schema\DTOs\TableDTO;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
+use Doctrine\DBAL\Schema\DefaultExpression;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\DBAL\Types\Type;
 
@@ -38,7 +39,7 @@ class SchemaParser
             $typeName = $this->resolveTypeName($column->getType());
             $default = $column->getDefault();
 
-            if ($default instanceof \Doctrine\DBAL\Schema\DefaultExpression) {
+            if ($default instanceof DefaultExpression) {
                 $class = get_class($default);
                 $parts = explode('\\', $class);
                 $default = end($parts);
@@ -47,7 +48,7 @@ class SchemaParser
             return new ColumnDTO(
                 name: $column->getName(),
                 type: $typeName,
-                nullable: !$column->getNotnull(),
+                nullable: ! $column->getNotnull(),
                 default: $default,
                 primary: in_array($column->getName(), $primaryColumns, true),
                 comment: $column->getComment(),

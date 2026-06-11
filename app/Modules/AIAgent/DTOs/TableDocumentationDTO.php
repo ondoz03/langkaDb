@@ -78,7 +78,7 @@ readonly class TableDocumentationDTO implements Arrayable
                 '| %s | %s | %s | %s | %s |',
                 $col->name,
                 $col->type,
-                !empty($flags) ? '`' . implode(' ', $flags) . '`' : '',
+                ! empty($flags) ? '`'.implode(' ', $flags).'`' : '',
                 $col->description,
                 $example,
             );

@@ -19,8 +19,8 @@
 - [x] Doctrine DBAL schema introspection (SchemaScanner)
 - [x] Schema parser → DTO clean (Table, Column, Index, Relation)
 - [x] ContextBuilder → AI-ready JSON output
-- [ ] ❌ SSH tunnel via Tauri — belum working
-- [ ] ❌ Redis cache — belum aktif
+- [x] ❌ SSH tunnel via Tauri — **SKIPPED** (not required for MVP)
+- [x] ❌ Redis cache — **SKIPPED** (using database/file driver instead)
 
 ## ✅ Phase 3 — Visual Graph Engine *COMPLETE*
 - [x] Vue Flow + custom TableNode + RelationEdge
@@ -63,7 +63,7 @@
 - [ ] ❌ QA checklist — koneksi real MySQL, 100 tabel test
 - [ ] ❌ AI response streaming
 - [ ] ❌ Lazy loading / code splitting
-- [ ] ❌ Redis caching untuk schema queries
+- [x] ❌ Redis caching untuk schema queries — **SKIPPED** (using file/database cache)
 - [ ] ❌ Build testing (.deb, .AppImage)
 
 ---

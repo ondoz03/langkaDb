@@ -130,7 +130,7 @@ class SecurityAgent implements AgentInterface
         foreach ($report->piiFindings as $pii) {
             $findings[] = [
                 'severity' => $pii->severity,
-                'message' => "[PII] {$pii->category} column '{$pii->column}' found in table '{$pii->table}'" . ($pii->hasConstraint ? ' (constrained)' : ' (unconstrained)'),
+                'message' => "[PII] {$pii->category} column '{$pii->column}' found in table '{$pii->table}'".($pii->hasConstraint ? ' (constrained)' : ' (unconstrained)'),
             ];
         }
         foreach ($report->constraintIssues as $ci) {
@@ -207,7 +207,7 @@ class SecurityAgent implements AgentInterface
         }
 
         // Check for role-based access control structure
-        if (!empty($userTables) && empty($roleTables)) {
+        if (! empty($userTables) && empty($roleTables)) {
             $findings[] = new PermissionFindingDTO(
                 user: 'N/A',
                 role: 'N/A',
@@ -218,7 +218,7 @@ class SecurityAgent implements AgentInterface
         }
 
         // Check for missing pivot between users and roles
-        if (!empty($userTables) && !empty($roleTables) && empty($pivotTables)) {
+        if (! empty($userTables) && ! empty($roleTables) && empty($pivotTables)) {
             $findings[] = new PermissionFindingDTO(
                 user: 'N/A',
                 role: 'N/A',
@@ -267,7 +267,7 @@ class SecurityAgent implements AgentInterface
                     continue;
                 }
 
-                $hasConstraint = !$column->nullable;
+                $hasConstraint = ! $column->nullable;
                 $hasUnique = $this->hasUniqueIndex($table, $column->name);
 
                 $recommendation = match ($piiMatch['category']) {
@@ -326,7 +326,7 @@ class SecurityAgent implements AgentInterface
                 // Check for oversized VARCHAR that should be TEXT
                 if (preg_match('/^varchar\((\d+)\)$/i', $column->type, $m)) {
                     $length = (int) $m[1];
-                    if ($length > 500 && !$column->nullable) {
+                    if ($length > 500 && ! $column->nullable) {
                         $issues[] = [
                             'severity' => 'LOW',
                             'message' => "Column '{$table->name}.{$column->name}' uses VARCHAR({$length}) which is large. Consider TEXT or reduce length.",
@@ -352,7 +352,7 @@ class SecurityAgent implements AgentInterface
                     break;
                 }
             }
-            if (!$hasPrimary && preg_match('/^_|^tmp_|^temp_/i', $table->name) === 0) {
+            if (! $hasPrimary && preg_match('/^_|^tmp_|^temp_/i', $table->name) === 0) {
                 $issues[] = [
                     'severity' => 'HIGH',
                     'message' => "Table '{$table->name}' has no primary key. Every table should have a primary key for data integrity and performance.",
@@ -362,7 +362,7 @@ class SecurityAgent implements AgentInterface
             // Check for missing indexes on foreign key columns
             $fkColumnNames = [];
             foreach ($table->columns as $column) {
-                if (preg_match('/_id$/i', $column->name) && !$column->primary) {
+                if (preg_match('/_id$/i', $column->name) && ! $column->primary) {
                     $fkColumnNames[] = $column->name;
                 }
             }
@@ -371,7 +371,7 @@ class SecurityAgent implements AgentInterface
                 $indexedColumns = array_merge($indexedColumns, $index->columns);
             }
             foreach ($fkColumnNames as $fkCol) {
-                if (!in_array($fkCol, $indexedColumns, true)) {
+                if (! in_array($fkCol, $indexedColumns, true)) {
                     $issues[] = [
                         'severity' => 'MEDIUM',
                         'message' => "Column '{$table->name}.{$fkCol}' looks like a foreign key but has no index. Add an index for query performance.",
@@ -476,7 +476,7 @@ PROMPT;
         }
 
         return [
-            'findings' => [['severity' => 'low', 'message' => 'AI: ' . mb_substr($response, 0, 150)]],
+            'findings' => [['severity' => 'low', 'message' => 'AI: '.mb_substr($response, 0, 150)]],
             'recommendations' => [['priority' => 'low', 'message' => 'AI security analysis raw response shown above.']],
             'score' => 0,
             'report' => [],
@@ -597,7 +597,7 @@ PROMPT;
         $seenRecs = [];
         foreach ($piiFindings as $f) {
             $key = md5($f->recommendation);
-            if (!isset($seenRecs[$key]) && $f->severity === 'HIGH') {
+            if (! isset($seenRecs[$key]) && $f->severity === 'HIGH') {
                 $seenRecs[$key] = true;
                 $recs[] = [
                     'priority' => $f->severity,
@@ -619,6 +619,6 @@ PROMPT;
 
     private function percent(int $part, int $total): string
     {
-        return $total > 0 ? round(($part / $total) * 100) . '%' : '0%';
+        return $total > 0 ? round(($part / $total) * 100).'%' : '0%';
     }
 }

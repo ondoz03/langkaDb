@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Schema\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Connection\Models\Connection;
 use App\Models\SchemaSnapshot;
+use App\Modules\Connection\Models\Connection;
 use App\Modules\Schema\Services\SchemaDiffService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;

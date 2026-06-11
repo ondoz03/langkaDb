@@ -12,11 +12,8 @@ use Illuminate\Contracts\Support\Arrayable;
 readonly class SecurityReportDTO implements Arrayable
 {
     /**
-     * @param PermissionFindingDTO[] $permissionFindings
-     * @param PIIFindingDTO[]        $piiFindings
-     * @param array                  $constraintIssues
-     * @param array                  $recommendations
-     * @param array                  $metadata
+     * @param  PermissionFindingDTO[]  $permissionFindings
+     * @param  PIIFindingDTO[]  $piiFindings
      */
     public function __construct(
         public int $score,                        // Overall security score 0–100

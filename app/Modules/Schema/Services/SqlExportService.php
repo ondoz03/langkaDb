@@ -55,16 +55,16 @@ class SqlExportService
         $isSingleAutoIncrement = count($pkColumns) === 1;
 
         foreach ($table->columns as $column) {
-            $def = "  `{$column->name}` " . $this->mapType($column->type);
+            $def = "  `{$column->name}` ".$this->mapType($column->type);
 
             if ($column->primary && $isSingleAutoIncrement) {
                 $def .= ' NOT NULL AUTO_INCREMENT';
             } else {
-                if (!$column->nullable) {
+                if (! $column->nullable) {
                     $def .= ' NOT NULL';
                 }
                 if ($column->default !== null) {
-                    $def .= ' DEFAULT ' . $this->formatDefault($column->default);
+                    $def .= ' DEFAULT '.$this->formatDefault($column->default);
                 }
             }
 
@@ -74,7 +74,7 @@ class SqlExportService
         // Primary key constraint (gunakan yang sudah difilter di atas)
         if (count($pkColumns) > 0) {
             $pkNames = array_map(fn (ColumnDTO $c) => "`{$c->name}`", $pkColumns);
-            $columnDefs[] = '  PRIMARY KEY (' . implode(', ', $pkNames) . ')';
+            $columnDefs[] = '  PRIMARY KEY ('.implode(', ', $pkNames).')';
         }
 
         // Indexes
@@ -86,9 +86,9 @@ class SqlExportService
             $colNames = array_map(fn (string $c) => "`{$c}`", $index->columns);
 
             if ($index->unique) {
-                $columnDefs[] = "  UNIQUE KEY `{$index->name}` (" . implode(', ', $colNames) . ')';
+                $columnDefs[] = "  UNIQUE KEY `{$index->name}` (".implode(', ', $colNames).')';
             } else {
-                $columnDefs[] = "  KEY `{$index->name}` (" . implode(', ', $colNames) . ')';
+                $columnDefs[] = "  KEY `{$index->name}` (".implode(', ', $colNames).')';
             }
         }
 
@@ -105,7 +105,7 @@ class SqlExportService
         $lines[] = implode(",\n", $columnDefs);
         $lines[] = ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci';
 
-        return implode("\n", $lines) . ";\n";
+        return implode("\n", $lines).";\n";
     }
 
     /**
@@ -113,9 +113,9 @@ class SqlExportService
      */
     public function generateSchemaDDL(array $tables, array $relations, ?string $databaseName = null): string
     {
-        $output = '-- AetherDB AI — Schema Export' . "\n";
-        $output .= '-- Generated: ' . now()->toDateTimeString() . "\n";
-        $output .= '-- Engine: MySQL / MariaDB' . "\n\n";
+        $output = '-- AetherDB AI — Schema Export'."\n";
+        $output .= '-- Generated: '.now()->toDateTimeString()."\n";
+        $output .= '-- Engine: MySQL / MariaDB'."\n\n";
 
         if ($databaseName) {
             $output .= "CREATE DATABASE IF NOT EXISTS `{$databaseName}`;\n";

@@ -28,7 +28,7 @@ class ConnectionRepository
     {
         $connection = Connection::find($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return null;
         }
 
@@ -42,7 +42,7 @@ class ConnectionRepository
     {
         $connection = Connection::find($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return false;
         }
 

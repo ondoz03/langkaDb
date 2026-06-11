@@ -30,7 +30,7 @@ class SchemaFormatter
                 $cols[] = implode(' ', $parts);
             }
 
-            $lines[] = $table->name . ': ' . implode(', ', $cols);
+            $lines[] = $table->name.': '.implode(', ', $cols);
         }
 
         $relations = [];
@@ -42,7 +42,7 @@ class SchemaFormatter
         $result = implode("\n", $lines);
 
         if ($relations) {
-            $result .= "\n\nRelations:\n" . implode("\n", $relations);
+            $result .= "\n\nRelations:\n".implode("\n", $relations);
         }
 
         return $result;
@@ -67,14 +67,14 @@ class SchemaFormatter
             $info = "{$table->name} ({$colCount} cols)";
 
             if ($pk) {
-                $info .= ' PK: ' . implode(', ', $pk);
+                $info .= ' PK: '.implode(', ', $pk);
             }
 
             $lines[] = $info;
         }
 
         $result = implode("\n", $lines);
-        $result .= "\n\nTotal: " . count($context->tables) . " tables, {$totalCols} columns";
+        $result .= "\n\nTotal: ".count($context->tables)." tables, {$totalCols} columns";
 
         $relations = [];
 
@@ -83,7 +83,7 @@ class SchemaFormatter
         }
 
         if ($relations) {
-            $result .= ", " . count($relations) . " relations\n" . implode("\n", $relations);
+            $result .= ', '.count($relations)." relations\n".implode("\n", $relations);
         }
 
         return $result;

@@ -169,7 +169,7 @@ class AsyncJobController extends Controller
     {
         $job = DB::table('ai_job_results')->find($jobId);
 
-        if (!$job) {
+        if (! $job) {
             return response()->json(['message' => 'Job not found'], 404);
         }
 
@@ -193,7 +193,7 @@ class AsyncJobController extends Controller
     {
         $job = DB::table('ai_job_results')->find($jobId);
 
-        if (!$job) {
+        if (! $job) {
             return response()->json(['message' => 'Job not found'], 404);
         }
 

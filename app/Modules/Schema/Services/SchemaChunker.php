@@ -79,7 +79,7 @@ class SchemaChunker
     }
 
     /**
-     * @param array $tables array of TableDTO
+     * @param  array  $tables  array of TableDTO
      * @return array<int, array> grouped tables
      */
     private function chunkTables(array $tables): array
@@ -94,16 +94,17 @@ class SchemaChunker
 
             // If a single table exceeds limit, it gets its own chunk
             if ($tableTokens > $this->maxTokensPerChunk) {
-                if (!empty($currentGroup)) {
+                if (! empty($currentGroup)) {
                     $groups[] = $currentGroup;
                 }
                 $groups[] = [$table];
                 $currentGroup = [];
                 $currentTokens = 0;
+
                 continue;
             }
 
-            if ($currentTokens + $tableTokens > $this->maxTokensPerChunk && !empty($currentGroup)) {
+            if ($currentTokens + $tableTokens > $this->maxTokensPerChunk && ! empty($currentGroup)) {
                 $groups[] = $currentGroup;
                 $currentGroup = [];
                 $currentTokens = 0;
@@ -113,7 +114,7 @@ class SchemaChunker
             $currentTokens += $tableTokens;
         }
 
-        if (!empty($currentGroup)) {
+        if (! empty($currentGroup)) {
             $groups[] = $currentGroup;
         }
 

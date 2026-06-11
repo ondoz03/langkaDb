@@ -9,10 +9,10 @@ use Illuminate\Contracts\Support\Arrayable;
 readonly class ExplainResultDTO implements Arrayable
 {
     /**
-     * @param ExplainNodeDTO[] $tree
-     * @param array<string, mixed> $costBreakdown
-     * @param string[] $suggestions
-     * @param array<string, mixed> $raw
+     * @param  ExplainNodeDTO[]  $tree
+     * @param  array<string, mixed>  $costBreakdown
+     * @param  string[]  $suggestions
+     * @param  array<string, mixed>  $raw
      */
     public function __construct(
         public string $query,
@@ -23,7 +23,7 @@ readonly class ExplainResultDTO implements Arrayable
     ) {}
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {

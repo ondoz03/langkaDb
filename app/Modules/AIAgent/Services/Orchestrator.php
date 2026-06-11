@@ -62,16 +62,24 @@ class Orchestrator
         $agentResults = [
             'schema' => $this->schemaAgent->analyze($context, $apiKey, $provider),
         ];
-        if ($onProgress) $onProgress(25);
+        if ($onProgress) {
+            $onProgress(25);
+        }
 
         $agentResults['security'] = $this->securityAgent->analyze($context, $apiKey, $provider);
-        if ($onProgress) $onProgress(50);
+        if ($onProgress) {
+            $onProgress(50);
+        }
 
         $agentResults['monitoring'] = $this->monitoringAgent->analyze($context, $apiKey, $provider);
-        if ($onProgress) $onProgress(65);
+        if ($onProgress) {
+            $onProgress(65);
+        }
 
         $agentResults['optimization'] = $this->optimizationAgent->analyze($context, $apiKey, $provider);
-        if ($onProgress) $onProgress(80);
+        if ($onProgress) {
+            $onProgress(80);
+        }
 
         $agentResults['documentation'] = $this->documentationAgent->analyze($context, $apiKey, $provider);
 

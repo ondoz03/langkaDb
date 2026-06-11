@@ -28,7 +28,7 @@ class ConnectionController extends Controller
     {
         $connection = $this->connectionService->getById($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return response()->json(['message' => 'Connection not found'], 404);
         }
 
@@ -78,7 +78,7 @@ class ConnectionController extends Controller
 
         $connection = $this->connectionService->update($id, $validated);
 
-        if (!$connection) {
+        if (! $connection) {
             return response()->json(['message' => 'Connection not found'], 404);
         }
 
@@ -89,7 +89,7 @@ class ConnectionController extends Controller
     {
         $deleted = $this->connectionService->delete($id);
 
-        if (!$deleted) {
+        if (! $deleted) {
             return response()->json(['message' => 'Connection not found'], 404);
         }
 

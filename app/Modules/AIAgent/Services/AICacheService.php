@@ -109,12 +109,12 @@ class AICacheService
                     $cursor = (int) $result[0];
                     $keys = $result[1] ?? [];
 
-                    if (!empty($keys)) {
+                    if (! empty($keys)) {
                         $allKeys = array_merge($allKeys, $keys);
                     }
                 } while ($cursor > 0);
 
-                if (!empty($allKeys)) {
+                if (! empty($allKeys)) {
                     $redis->del($allKeys);
                 }
 
@@ -156,10 +156,10 @@ class AICacheService
 
         return match ($type) {
             'recommendation' => "{$prefix}:recommendation:{$connectionId}:{$hash}",
-            'chat'           => "{$prefix}:chat:{$connectionId}:{$sessionId}:{$hash}",
-            'health'         => "{$prefix}:health:{$connectionId}:{$hash}",
-            'schema'         => "{$prefix}:schema:{$connectionId}",
-            default          => throw new \InvalidArgumentException("Unknown cache type: {$type}"),
+            'chat' => "{$prefix}:chat:{$connectionId}:{$sessionId}:{$hash}",
+            'health' => "{$prefix}:health:{$connectionId}:{$hash}",
+            'schema' => "{$prefix}:schema:{$connectionId}",
+            default => throw new \InvalidArgumentException("Unknown cache type: {$type}"),
         };
     }
 
@@ -199,9 +199,9 @@ class AICacheService
         if ($this->ttlConfig === null) {
             $this->ttlConfig = config('ai-cache.ttl', [
                 'recommendation' => 1800,
-                'chat'           => 3600,
-                'health'         => 900,
-                'schema'         => 300,
+                'chat' => 3600,
+                'health' => 900,
+                'schema' => 300,
             ]);
         }
 
@@ -226,6 +226,7 @@ class AICacheService
         if (app()->environment('testing')) {
             $this->store = Cache::store('array');
             $this->storeName = 'array';
+
             return $this->store;
         }
 
@@ -243,7 +244,7 @@ class AICacheService
         } catch (\Throwable $e) {
             Log::warning('AICacheService: primary store unavailable, falling back', [
                 'primary' => $primary,
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
         }
 
@@ -264,7 +265,7 @@ class AICacheService
             // Absolute last resort — the array store never throws.
             Log::error('AICacheService: fallback store also unavailable, using array', [
                 'fallback' => $fallback,
-                'error'    => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
 
             $this->store = Cache::store('array');

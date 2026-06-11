@@ -25,6 +25,7 @@ class RuleBasedService
             'security_analysis' => $this->analyzeSecurity($schema),
             'documentation' => $this->generateDocs($schema),
             'chat' => $this->chatFallback(),
+            'schema_generation' => 'TASK_NOT_HANDLED_BY_RULE',
             default => json_encode([
                 'findings' => [['severity' => 'info', 'message' => 'Rule-based analysis complete.']],
                 'recommendations' => [],
@@ -40,7 +41,7 @@ class RuleBasedService
     {
         $data = json_decode($prompt, true);
 
-        if (!$data || !is_array($data)) {
+        if (! $data || ! is_array($data)) {
             // Try to extract from raw prompt text
             if (preg_match('/\{.*"tables".*\}/s', $prompt, $m)) {
                 $data = json_decode($m[0], true);
@@ -110,7 +111,7 @@ class RuleBasedService
                 }
             }
 
-            if (!$hasPk) {
+            if (! $hasPk) {
                 $tablesWithoutPk++;
                 $findings[] = [
                     'severity' => 'high',
@@ -267,7 +268,7 @@ class RuleBasedService
                 }
             }
 
-            if ($hasPassword && !$hasSalt) {
+            if ($hasPassword && ! $hasSalt) {
                 $findings[] = [
                     'severity' => 'high',
                     'message' => "[{$name}] Password column detected without salt column — hashing may be weak",
@@ -290,7 +291,7 @@ class RuleBasedService
                 }
             }
 
-            if (!$hasDeletedAt && $this->isDataTable($name)) {
+            if (! $hasDeletedAt && $this->isDataTable($name)) {
                 $recommendations[] = [
                     'priority' => 'low',
                     'message' => "Consider soft-delete (deleted_at) for table `{$name}` to prevent accidental data loss.",
@@ -355,7 +356,7 @@ class RuleBasedService
                 $colName = strtolower($col['name'] ?? '');
                 if (str_ends_with($colName, '_id') && $colName !== 'id') {
                     $fkColumns[] = $col['name'];
-                    if (!in_array($colName, $indexedColumns)) {
+                    if (! in_array($colName, $indexedColumns)) {
                         $recommendations[] = [
                             'type' => 'index',
                             'priority' => 'high',
@@ -386,7 +387,7 @@ class RuleBasedService
                         'type' => 'storage',
                         'priority' => 'low',
                         'table' => $name,
-                        'message' => "Consider storing large TEXT/BLOB columns in separate table to reduce row size and improve cache efficiency.",
+                        'message' => 'Consider storing large TEXT/BLOB columns in separate table to reduce row size and improve cache efficiency.',
                         'sql' => null,
                     ];
                     break;
@@ -421,7 +422,7 @@ class RuleBasedService
                 'name' => $name,
                 'tables' => $tablesInCluster,
                 'color' => $this->domainColor($name),
-                'description' => ucfirst($name) . ' domain tables',
+                'description' => ucfirst($name).' domain tables',
             ];
         }
 
@@ -567,6 +568,7 @@ class RuleBasedService
                 return false;
             }
         }
+
         return true;
     }
 
@@ -579,6 +581,7 @@ class RuleBasedService
                 return true;
             }
         }
+
         return false;
     }
 
@@ -643,12 +646,12 @@ class RuleBasedService
         }
 
         $parts = ["Table `{$name}`"];
-        $parts[] = count($columns) . ' columns';
+        $parts[] = count($columns).' columns';
         if ($hasTimestamps) {
             $parts[] = 'with timestamps';
         }
-        $parts[] = '~' . $rowCount . ' rows';
+        $parts[] = '~'.$rowCount.' rows';
 
-        return implode(', ', $parts) . '.';
+        return implode(', ', $parts).'.';
     }
 }

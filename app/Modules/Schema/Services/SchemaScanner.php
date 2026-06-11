@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Schema\Services;
 
-use App\Modules\Connection\Services\ConnectionEncryptor;
 use App\Modules\Connection\Repositories\ConnectionRepository;
+use App\Modules\Connection\Services\ConnectionEncryptor;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Schema\AbstractSchemaManager;
 
@@ -20,7 +20,7 @@ class SchemaScanner
     {
         $connection = $this->connectionRepo->findById($connectionId);
 
-        if (!$connection) {
+        if (! $connection) {
             throw new \RuntimeException('Connection not found');
         }
 

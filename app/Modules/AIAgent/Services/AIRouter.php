@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\AIAgent\Services;
 
+use Illuminate\Support\Facades\Log;
+
 class AIRouter
 {
     public function __construct(
@@ -46,7 +48,7 @@ class AIRouter
         $isDeterministic = in_array($task, $deterministicTasks, true);
 
         // Resolve API key from env if not provided
-        if (!$apiKey) {
+        if (! $apiKey) {
             $apiKey = match ($this->envKey($task)) {
                 'openai' => env('OPENAI_API_KEY'),
                 'anthropic' => env('ANTHROPIC_API_KEY'),
@@ -59,9 +61,10 @@ class AIRouter
         // Rule-based is the DEFAULT path. Only use external AI when
         // the caller explicitly opts in (provider != 'rule').
         if ($isDeterministic) {
-            if ($provider === 'rule' || !$apiKey) {
+            if ($provider === 'rule' || ! $apiKey) {
                 return $this->ruleBased->process($task, json_encode($messages));
             }
+
             // Explicit external AI request for deterministic task
             return $this->callExternal($task, $messages, $apiKey, $provider);
         }
@@ -120,23 +123,29 @@ class AIRouter
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode !== 200 || !$response) {
-            \Illuminate\Support\Facades\Log::warning('AIRouter: external API failed, falling back to rule-based', [
+        if ($httpCode !== 200 || ! $response) {
+            Log::warning('AIRouter: external API failed, falling back to rule-based', [
                 'task' => $task,
                 'provider' => $provider,
                 'http_code' => $httpCode,
             ]);
+
             return null;
         }
 
         $data = json_decode($response, true);
+
         return $data['choices'][0]['message']['content'] ?? null;
     }
 
     private function envKey(string $task): ?string
     {
-        if (env('OPENAI_API_KEY')) return 'openai';
-        if (env('ANTHROPIC_API_KEY')) return 'anthropic';
+        if (env('OPENAI_API_KEY')) {
+            return 'openai';
+        }
+        if (env('ANTHROPIC_API_KEY')) {
+            return 'anthropic';
+        }
 
         return null;
     }
@@ -166,7 +175,7 @@ class AIRouter
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode !== 200 || !$response) {
+        if ($httpCode !== 200 || ! $response) {
             return $this->ruleBased->process('general', $prompt);
         }
 
@@ -200,7 +209,7 @@ class AIRouter
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode !== 200 || !$response) {
+        if ($httpCode !== 200 || ! $response) {
             return json_encode([
                 'findings' => [['severity' => 'high', 'message' => "DeepSeek API error (HTTP {$httpCode})"]],
                 'recommendations' => [],
@@ -212,7 +221,7 @@ class AIRouter
 
         if (isset($data['error'])) {
             return json_encode([
-                'findings' => [['severity' => 'high', 'message' => 'DeepSeek: ' . ($data['error']['message'] ?? 'Unknown error')]],
+                'findings' => [['severity' => 'high', 'message' => 'DeepSeek: '.($data['error']['message'] ?? 'Unknown error')]],
                 'recommendations' => [],
                 'score' => 0,
             ]);
@@ -232,7 +241,7 @@ class AIRouter
 
         foreach ($messages as $msg) {
             if ($msg['role'] === 'system') {
-                $systemContent .= $msg['content'] . "\n";
+                $systemContent .= $msg['content']."\n";
             } else {
                 $chatMessages[] = ['role' => $msg['role'], 'content' => $msg['content']];
             }
@@ -244,7 +253,7 @@ class AIRouter
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
-                'x-api-key: ' . $apiKey,
+                'x-api-key: '.$apiKey,
                 'anthropic-version: 2023-06-01',
             ],
             CURLOPT_POSTFIELDS => json_encode([
@@ -259,7 +268,7 @@ class AIRouter
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode !== 200 || !$response) {
+        if ($httpCode !== 200 || ! $response) {
             return 'Maaf, terjadi kesalahan.';
         }
 
@@ -272,7 +281,7 @@ class AIRouter
     {
         $apiKey = $overrideKey ?? env('ANTHROPIC_API_KEY');
 
-        if (!$apiKey) {
+        if (! $apiKey) {
             return $this->ruleBased->process('general', $prompt);
         }
 
@@ -282,7 +291,7 @@ class AIRouter
             CURLOPT_POST => true,
             CURLOPT_HTTPHEADER => [
                 'Content-Type: application/json',
-                'x-api-key: ' . $apiKey,
+                'x-api-key: '.$apiKey,
                 'anthropic-version: 2023-06-01',
             ],
             CURLOPT_POSTFIELDS => json_encode([
@@ -299,7 +308,7 @@ class AIRouter
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
-        if ($httpCode !== 200 || !$response) {
+        if ($httpCode !== 200 || ! $response) {
             return $this->ruleBased->process('general', $prompt);
         }
 

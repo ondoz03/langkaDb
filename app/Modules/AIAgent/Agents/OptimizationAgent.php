@@ -7,7 +7,6 @@ namespace App\Modules\AIAgent\Agents;
 use App\Modules\AIAgent\Contracts\AgentInterface;
 use App\Modules\AIAgent\DTOs\AgentResultDTO;
 use App\Modules\Schema\DTOs\ColumnDTO;
-use App\Modules\Schema\DTOs\IndexDTO;
 use App\Modules\Schema\DTOs\SchemaContextDTO;
 use App\Modules\Schema\DTOs\TableDTO;
 
@@ -45,6 +44,9 @@ class OptimizationAgent implements AgentInterface
 
             // 7. Wide VARCHAR columns that could be TEXT
             $this->detectWideVarchar($table, $findings, $recommendations);
+
+            // 8. Normalization issues (1NF / 2NF / 3NF)
+            $this->detectNormalizationIssues($table, $findings, $recommendations);
         }
 
         // Add summary recommendations
@@ -79,7 +81,7 @@ class OptimizationAgent implements AgentInterface
             }
         }
 
-        if (!$hasPrimary) {
+        if (! $hasPrimary) {
             $findings[] = [
                 'severity' => 'high',
                 'message' => "[{$table->name}] No primary key defined — every table should have a primary key for data integrity, replication, and performance",
@@ -113,7 +115,7 @@ class OptimizationAgent implements AgentInterface
         foreach ($table->columns as $column) {
             $name = $column->name;
             // Columns ending with _id that are NOT primary keys are likely FKs
-            if (str_ends_with($name, '_id') && !$column->primary && $name !== 'id') {
+            if (str_ends_with($name, '_id') && ! $column->primary && $name !== 'id') {
                 $fkColumns[] = $name;
             }
         }
@@ -131,7 +133,7 @@ class OptimizationAgent implements AgentInterface
         }
 
         foreach ($fkColumns as $fkCol) {
-            if (!in_array($fkCol, $indexedColumns, true)) {
+            if (! in_array($fkCol, $indexedColumns, true)) {
                 $findings[] = [
                     'severity' => 'medium',
                     'message' => "[{$table->name}] Foreign key column `{$fkCol}` has no index — causes full table scan on JOIN queries",
@@ -163,11 +165,11 @@ class OptimizationAgent implements AgentInterface
                 if ($this->isPrefixOrEqual($colsA, $colsB)) {
                     $findings[] = [
                         'severity' => 'medium',
-                        'message' => "[{$table->name}] Duplicate/redundant indexes: `{$indexes[$i]->name}` and `{$indexes[$j]->name}` — both cover " . implode(', ', $colsA),
+                        'message' => "[{$table->name}] Duplicate/redundant indexes: `{$indexes[$i]->name}` and `{$indexes[$j]->name}` — both cover ".implode(', ', $colsA),
                     ];
                     $recommendations[] = [
                         'priority' => 'medium',
-                        'message' => "Remove redundant index `{$indexes[$j]->name}` from `{$table->name}` — index `{$indexes[$i]->name}` already covers " . implode(', ', $colsA),
+                        'message' => "Remove redundant index `{$indexes[$j]->name}` from `{$table->name}` — index `{$indexes[$i]->name}` already covers ".implode(', ', $colsA),
                     ];
                 }
             }
@@ -264,7 +266,7 @@ class OptimizationAgent implements AgentInterface
         if ($totalWithoutPk > 0 || $totalHighRowsNoIndex > 0) {
             $recommendations[] = [
                 'priority' => 'high',
-                'message' => "Run pt-query-digest or enable slow query log to identify the most impactful indexes to add first.",
+                'message' => 'Run pt-query-digest or enable slow query log to identify the most impactful indexes to add first.',
             ];
         }
     }
@@ -307,6 +309,7 @@ class OptimizationAgent implements AgentInterface
         foreach ($context->tables as $table) {
             $total += count($table->indexes);
         }
+
         return $total;
     }
 
@@ -321,10 +324,11 @@ class OptimizationAgent implements AgentInterface
                     break;
                 }
             }
-            if (!$hasPk) {
+            if (! $hasPk) {
                 $count++;
             }
         }
+
         return $count;
     }
 
@@ -336,6 +340,7 @@ class OptimizationAgent implements AgentInterface
                 $count++;
             }
         }
+
         return $count;
     }
 
@@ -346,11 +351,12 @@ class OptimizationAgent implements AgentInterface
             $fkCols = $this->getFkColumns($table);
             $indexedCols = $this->getIndexedColumns($table);
             foreach ($fkCols as $fkCol) {
-                if (!in_array($fkCol, $indexedCols, true)) {
+                if (! in_array($fkCol, $indexedCols, true)) {
                     $count++;
                 }
             }
         }
+
         return $count;
     }
 
@@ -366,10 +372,11 @@ class OptimizationAgent implements AgentInterface
     {
         $fkCols = [];
         foreach ($table->columns as $column) {
-            if (str_ends_with($column->name, '_id') && !$column->primary && $column->name !== 'id') {
+            if (str_ends_with($column->name, '_id') && ! $column->primary && $column->name !== 'id') {
                 $fkCols[] = $column->name;
             }
         }
+
         return $fkCols;
     }
 
@@ -384,6 +391,7 @@ class OptimizationAgent implements AgentInterface
                 $cols[] = $col;
             }
         }
+
         return $cols;
     }
 
@@ -395,10 +403,11 @@ class OptimizationAgent implements AgentInterface
         }
         $indexedCols = $this->getIndexedColumns($table);
         foreach ($fkCols as $fkCol) {
-            if (!in_array($fkCol, $indexedCols, true)) {
+            if (! in_array($fkCol, $indexedCols, true)) {
                 return false;
             }
         }
+
         return true;
     }
 
@@ -413,11 +422,126 @@ class OptimizationAgent implements AgentInterface
         }
 
         foreach ($a as $i => $col) {
-            if (!isset($b[$i]) || $b[$i] !== $col) {
+            if (! isset($b[$i]) || $b[$i] !== $col) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    // ─── Normalization Checker (1NF / 2NF / 3NF) ────────────────────
+
+    private function detectNormalizationIssues(TableDTO $table, array &$findings, array &$recommendations): void
+    {
+        $columns = $table->columns;
+        $colNames = array_map(fn (ColumnDTO $c) => $c->name, $columns);
+
+        // 1NF: Detect repeating groups (col_1, col_2, col_3 patterns)
+        $repeatingGroups = $this->findRepeatingGroups($colNames);
+        if (! empty($repeatingGroups)) {
+            foreach ($repeatingGroups as $group) {
+                $findings[] = [
+                    'severity' => 'medium',
+                    'message' => "[{$table->name}] 1NF violation: repeating group '{$group['prefix']}' (columns: {$group['columns']}) — consider a separate related table",
+                ];
+                $recommendations[] = [
+                    'priority' => 'medium',
+                    'message' => "Extract {$group['prefix']} columns from `{$table->name}` into a separate table with a foreign key back to `{$table->name}`.",
+                ];
+            }
+        }
+
+        // 1NF: Detect JSON/array columns that should be separate tables
+        foreach ($columns as $col) {
+            if (in_array(strtoupper($col->type), ['JSON', 'ARRAY'], true)) {
+                $findings[] = [
+                    'severity' => 'info',
+                    'message' => "[{$table->name}] Column `{$col->name}` is type {$col->type} — consider normalizing into a related table for queryability",
+                ];
+                $recommendations[] = [
+                    'priority' => 'low',
+                    'message' => "If `{$table->name}`.`{$col->name}` contains structured data, extract it into a child table with a foreign key.",
+                ];
+            }
+        }
+
+        // 2NF / 3NF: Detect denormalized repeated prefixes
+        $repeatedPrefixes = $this->findDenormalizedPrefixes($colNames);
+        if (! empty($repeatedPrefixes)) {
+            foreach ($repeatedPrefixes as $item) {
+                $findings[] = [
+                    'severity' => 'low',
+                    'message' => "[{$table->name}] Possible denormalization: columns with '{$item['prefix']}' prefix ({$item['columns']}) might belong to a related entity",
+                ];
+                $recommendations[] = [
+                    'priority' => 'low',
+                    'message' => "Review if {$item['prefix']} columns in `{$table->name}` should be in a separate table.",
+                ];
+            }
+        }
+    }
+
+    /**
+     * Find repeating groups like phone_1, phone_2, phone_3 or col1, col2, col3.
+     */
+    private function findRepeatingGroups(array $colNames): array
+    {
+        $groups = [];
+        $pattern = '/^(.+?)[_\s]?(\d+)$/';
+
+        $matches = [];
+        foreach ($colNames as $col) {
+            if (preg_match($pattern, $col, $m)) {
+                $prefix = strtolower($m[1]);
+                $matches[$prefix][] = $col;
+            }
+        }
+
+        foreach ($matches as $prefix => $cols) {
+            if (count($cols) >= 2) {
+                $groups[] = [
+                    'prefix' => $prefix,
+                    'columns' => implode(', ', $cols),
+                ];
+            }
+        }
+
+        // Sort by repetition count (most egregious first)
+        usort($groups, fn ($a, $b) => count(explode(', ', $b['columns'])) <=> count(explode(', ', $a['columns'])));
+
+        return $groups;
+    }
+
+    /**
+     * Find denormalized prefixes like address_street, address_city, address_zip.
+     */
+    private function findDenormalizedPrefixes(array $colNames): array
+    {
+        $groups = [];
+        $prefixCount = [];
+
+        foreach ($colNames as $col) {
+            $parts = explode('_', $col);
+            if (count($parts) >= 2) {
+                $prefix = $parts[0];
+                if (! isset($prefixCount[$prefix])) {
+                    $prefixCount[$prefix] = [];
+                }
+                $prefixCount[$prefix][] = $col;
+            }
+        }
+
+        foreach ($prefixCount as $prefix => $cols) {
+            // Minimum 3 columns with same prefix to be suspicious
+            if (count($cols) >= 3 && ! in_array($prefix, ['created', 'updated', 'deleted'], true)) {
+                $groups[] = [
+                    'prefix' => $prefix,
+                    'columns' => implode(', ', $cols),
+                ];
+            }
+        }
+
+        return $groups;
     }
 }

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Connection\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Connection\Services\ConnectionEncryptor;
 use App\Modules\Connection\Repositories\ConnectionRepository;
+use App\Modules\Connection\Services\ConnectionEncryptor;
 use Doctrine\DBAL\DriverManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +24,7 @@ class QueryController extends Controller
 
         $connection = $this->connectionRepo->findById($id);
 
-        if (!$connection) {
+        if (! $connection) {
             return response()->json(['message' => 'Connection not found'], 404);
         }
 
@@ -61,7 +61,7 @@ class QueryController extends Controller
             $conn = DriverManager::getConnection($config);
             $stmt = $conn->executeQuery($sql);
             $rows = $stmt->fetchAllAssociative();
-            $columns = !empty($rows) ? array_keys($rows[0]) : [];
+            $columns = ! empty($rows) ? array_keys($rows[0]) : [];
 
             return response()->json([
                 'data' => [

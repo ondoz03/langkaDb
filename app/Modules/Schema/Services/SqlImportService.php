@@ -99,7 +99,7 @@ class SqlImportService
 
             // Constraint / Foreign Key
             if (preg_match('/^\s*(?:CONSTRAINT\s+`?\w+`?\s+)?FOREIGN\s+KEY\s*\(`?(\w+)`?\)\s*REFERENCES\s+`?(\w+)`?\s*\(`?(\w+)`?\)/i', $part, $m)) {
-                $fkName = 'fk_' . $tableName . '_' . $m[1];
+                $fkName = 'fk_'.$tableName.'_'.$m[1];
                 $relations[] = new RelationDTO(
                     name: $fkName,
                     fromTable: $tableName,
@@ -108,6 +108,7 @@ class SqlImportService
                     toColumn: $m[3],
                     type: 'belongs_to',
                 );
+
                 continue;
             }
 
@@ -124,6 +125,7 @@ class SqlImportService
                     unique: true,
                     type: 'primary',
                 );
+
                 continue;
             }
 
@@ -135,6 +137,7 @@ class SqlImportService
                     unique: true,
                     type: 'unique',
                 );
+
                 continue;
             }
 
@@ -146,6 +149,7 @@ class SqlImportService
                     unique: false,
                     type: 'index',
                 );
+
                 continue;
             }
 
@@ -178,7 +182,7 @@ class SqlImportService
     private function parseColumnDefinition(string $part, array $primaryColumns): ?ColumnDTO
     {
         // Match: column_name TYPE[(params)] [NOT NULL|NULL] [DEFAULT value] [AUTO_INCREMENT] [COMMENT '...']
-        if (!preg_match('/^`?(\w+)`?\s+(\w+(?:\s*\([^)]*\))?(?:\s+UNSIGNED)?(?:\s+ZEROFILL)?)(.*)$/i', $part, $m)) {
+        if (! preg_match('/^`?(\w+)`?\s+(\w+(?:\s*\([^)]*\))?(?:\s+UNSIGNED)?(?:\s+ZEROFILL)?)(.*)$/i', $part, $m)) {
             return null;
         }
 
@@ -187,7 +191,7 @@ class SqlImportService
         $suffix = strtoupper(trim($m[3]));
 
         $type = $this->normalizeType($rawType);
-        $nullable = !str_contains($suffix, 'NOT NULL') && !str_contains($suffix, 'PRIMARY KEY');
+        $nullable = ! str_contains($suffix, 'NOT NULL') && ! str_contains($suffix, 'PRIMARY KEY');
         $isPrimary = in_array($colName, $primaryColumns, true) || str_contains($suffix, 'PRIMARY KEY');
 
         $default = null;
@@ -208,7 +212,7 @@ class SqlImportService
         return new ColumnDTO(
             name: $colName,
             type: $type,
-            nullable: $nullable && !$isPrimary,
+            nullable: $nullable && ! $isPrimary,
             default: $default,
             primary: $isPrimary,
             comment: $comment,
@@ -274,6 +278,7 @@ class SqlImportService
         foreach (explode(',', $list) as $col) {
             $columns[] = trim($col, " `'\"");
         }
+
         return array_filter($columns);
     }
 

@@ -70,16 +70,16 @@ readonly class DocResultDTO implements Arrayable
         $lines[] = '';
         $lines[] = '## Overview';
         $lines[] = '';
-        $lines[] = "| Metric | Value |";
-        $lines[] = "|--------|-------|";
+        $lines[] = '| Metric | Value |';
+        $lines[] = '|--------|-------|';
         $lines[] = "| Total Tables | {$this->totalTables} |";
         $lines[] = "| Total Columns | {$this->totalColumns} |";
         $lines[] = "| Total Relations | {$this->totalRelations} |";
-        $lines[] = "| Domains | " . implode(', ', $this->domains) . " |";
+        $lines[] = '| Domains | '.implode(', ', $this->domains).' |';
         $lines[] = '';
 
         foreach ($this->tables as $table) {
-            $lines[] = "---";
+            $lines[] = '---';
             $lines[] = '';
             $lines[] = "## `{$table->name}`";
             $lines[] = '';
@@ -88,7 +88,7 @@ readonly class DocResultDTO implements Arrayable
             $lines[] = $table->description;
             $lines[] = '';
 
-            if (!empty($table->comment)) {
+            if (! empty($table->comment)) {
                 $lines[] = "> *Table comment:* {$table->comment}";
                 $lines[] = '';
             }
@@ -101,7 +101,7 @@ readonly class DocResultDTO implements Arrayable
             $lines[] = $table->toMarkdownTable();
             $lines[] = '';
 
-            if (!empty($table->relationships)) {
+            if (! empty($table->relationships)) {
                 $lines[] = '### Relationships';
                 $lines[] = '';
                 $lines[] = '| Name | From | To | Type |';
@@ -120,8 +120,8 @@ readonly class DocResultDTO implements Arrayable
                 $lines[] = '';
             }
 
-            if (!empty($table->tags)) {
-                $lines[] = '**Tags:** ' . implode(', ', array_map(fn ($t) => "`{$t}`", $table->tags));
+            if (! empty($table->tags)) {
+                $lines[] = '**Tags:** '.implode(', ', array_map(fn ($t) => "`{$t}`", $table->tags));
                 $lines[] = '';
             }
         }

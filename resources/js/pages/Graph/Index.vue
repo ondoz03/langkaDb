@@ -6,27 +6,57 @@ import SchemaGraph from '@/components/graph/SchemaGraph.vue'
 import TableDetailPanel from '@/components/graph/TableDetailPanel.vue'
 import ImportSqlDialog from '@/components/graph/ImportSqlDialog.vue'
 import SchemaDiffViewer from '@/components/graph/SchemaDiffViewer.vue'
+import SchemaToolbox from '@/components/graph/SchemaToolbox.vue'
+import PromptToErdDialog from '@/components/graph/PromptToErdDialog.vue'
 import { useGraph } from '@/composables/useGraph'
 import { useExport } from '@/composables/useExport'
 import { useSchemaSnapshot } from '@/composables/useSchemaSnapshot'
 import { useConnectionStore } from '@/stores/connection'
-import { Search, RefreshCw, Download, ChevronDown, Image, FileType, Upload, Camera, ArrowLeftRight, X, AlertTriangle } from 'lucide-vue-next'
+import type { TableData } from '@/composables/useGraph'
+import { Search, RefreshCw, Download, ChevronDown, Image, FileType, Upload, Camera, ArrowLeftRight, X, AlertTriangle, PanelLeft, Sparkles } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
 const store = useConnectionStore()
-const { nodes, edges, getFilteredNodes, loading, hoveredNode, selectedNode, searchQuery, showOnlyConnected, loadSchema, buildGraph, onNodeClick, closePanel, onViewportChange, rearrange } = useGraph()
-const { loading: exporting, exportSql } = useExport()
+const { nodes, edges, getFilteredNodes, loading, saving, hoveredNode, selectedNode, searchQuery, showOnlyConnected, loadSchema, buildGraph, savePositions, onNodeClick, closePanel, onViewportChange, rearrange, schema } = useGraph()
+const { loading: exporting, exportSql, exportDocx } = useExport()
 const { snapshots, loading: snapshotLoading, fetchSnapshots, createSnapshot, deleteSnapshot, computeDiff } = useSchemaSnapshot()
 
 const filteredNodes = computed(() => getFilteredNodes())
+const showToolbox = ref(true)
+const canvasTableNames = computed(() => (nodes.value as any[]).map((n: any) => n.id) as string[])
 const exportMenuOpen = ref(false)
 const importDialogOpen = ref(false)
+const promptDialogOpen = ref(false)
 const snapshotMenuOpen = ref(false)
 const showDiff = ref(false)
 const diffData = ref<any>(null)
 const diffLabelA = ref('')
 const diffLabelB = ref('')
 const newSnapshotLabel = ref('')
+
+function collectTableData(): TableData[] {
+  const canvasNodes = nodes.value as Node[]
+  if (!schema.value) return canvasNodes.map(n => n.data as TableData)
+
+  const onCanvas = new Set(canvasNodes.map(n => n.id))
+  const all: TableData[] = schema.value.tables.map(t => ({
+    tableName: t.name,
+    columns: t.columns as TableData['columns'],
+    indexes: (t.indexes ?? []) as TableData['indexes'],
+    rowCount: t.row_count,
+    sizeKb: t.size_mb * 1000,
+  }))
+  const canvasTables: TableData[] = canvasNodes.map(n => n.data as TableData)
+
+  const seen = new Set<string>()
+  return [...all, ...canvasTables].filter(t => {
+    if (seen.has(t.tableName)) return false
+    seen.add(t.tableName)
+    return true
+  })
+}
+
+const allTableData = computed(collectTableData)
 const selectedSnapshotA = ref<number | null>(null)
 const selectedSnapshotB = ref<number | null>(null)
 
@@ -132,6 +162,74 @@ async function handleCreateSnapshot() {
   if (snap) await fetchSnapshots(store.activeConnection.id)
 }
 
+function handleAddTable(tableData: TableData) {
+  const exists = nodes.value.some(n => n.id === tableData.tableName)
+  if (exists) return
+
+  const newNode: Node = {
+    id: tableData.tableName,
+    type: 'table',
+    position: { x: 100 + nodes.value.length * 30, y: 100 + nodes.value.length * 30 },
+    data: tableData,
+  }
+
+  const copy = [...nodes.value as any[]]
+  copy.push(newNode)
+  nodes.value = copy as any
+}
+
+function handleCreateTable(tableData: TableData) {
+  const idx = (nodes.value as any[]).findIndex((n: any) => n.id === tableData.tableName)
+  if (idx >= 0) {
+    nodes.value = (nodes.value as any[]).map((n: any) =>
+      n.id === tableData.tableName
+        ? { ...n, data: tableData }
+        : n
+    ) as any
+  } else {
+    handleAddTable(tableData)
+  }
+}
+
+function handleRemoveTable(tableName: string) {
+  nodes.value = (nodes.value as any[]).filter((n: any) => n.id !== tableName) as any
+  if (selectedNode.value?.tableName === tableName) {
+    closePanel()
+  }
+}
+
+function handleEditTable(tableData: TableData) {
+  // Already handled by CreateTableDialog via editTable prop
+}
+
+function handleDropOnGraph(e: DragEvent) {
+  const raw = e.dataTransfer?.getData('application/json')
+  if (!raw) return
+  try {
+    const table = JSON.parse(raw) as TableData
+    handleAddTable(table)
+  } catch {
+    // ignore invalid drops
+  }
+}
+
+function handlePromptImported(data: any) {
+  buildGraph(data)
+  promptDialogOpen.value = false
+}
+
+function handleNodeDragStop(node: any) {
+  if (store.activeConnectionId) {
+    savePositions(store.activeConnectionId, nodes.value as any[])
+  }
+}
+
+watch(() => (nodes.value as any[]).length, () => {
+  if (store.activeConnectionId && (nodes.value as any[]).length > 0) {
+    savePositions(store.activeConnectionId, nodes.value as any[])
+  }
+})
+
 async function handleComputeDiff() {
   if (!selectedSnapshotA.value || !selectedSnapshotB.value) return
   const a = snapshots.value.find((s: any) => s.id === selectedSnapshotA.value)
@@ -177,8 +275,34 @@ async function handleComputeDiff() {
     </div>
 
     <template v-else>
-      <!-- Toolbar -->
-      <div class="flex items-center gap-2 border-b border-border px-6 py-2.5">
+      <div class="flex flex-1 overflow-hidden">
+        <!-- Schema Toolbox -->
+        <div
+          v-show="showToolbox"
+          class="w-56 shrink-0 overflow-hidden transition-all"
+        >
+          <SchemaToolbox
+            :tables="allTableData"
+            :canvas-table-names="canvasTableNames"
+            @add-table="handleAddTable"
+            @remove-table="handleRemoveTable"
+            @edit-table="handleEditTable"
+            @create-table="handleCreateTable"
+          />
+        </div>
+
+        <!-- Main graph area -->
+        <div class="flex flex-1 flex-col overflow-hidden">
+          <!-- Toolbar -->
+          <div class="flex items-center gap-2 border-b border-border px-6 py-2.5">
+            <button
+              class="rounded-md border border-border bg-card p-1.5 text-muted-foreground transition-colors hover:text-foreground"
+              :class="{ 'bg-accent text-foreground': showToolbox }"
+              @click="showToolbox = !showToolbox"
+              title="Toggle Schema Toolbox"
+            >
+              <PanelLeft class="h-3.5 w-3.5" />
+            </button>
         <div class="relative flex-1 max-w-xs">
           <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -208,6 +332,13 @@ async function handleComputeDiff() {
         >
           <Upload class="h-3.5 w-3.5" />
           Import SQL
+        </button>
+        <button
+          class="flex items-center gap-1 rounded-md border border-accent-brand/30 bg-accent-brand/10 px-2.5 py-1.5 text-xs text-accent-brand transition-colors hover:bg-accent-brand/20"
+          @click="promptDialogOpen = true"
+        >
+          <Sparkles class="h-3.5 w-3.5" />
+          AI Schema
         </button>
 
         <!-- Snapshot menu -->
@@ -319,6 +450,15 @@ async function handleComputeDiff() {
               Export SQL DDL
             </button>
             <button
+              class="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-accent disabled:opacity-50"
+              :disabled="exporting"
+              @click="exportDocx(store.activeConnection!.id); exportMenuOpen = false"
+              type="button"
+            >
+              <FileType class="h-3.5 w-3.5" />
+              Export Data Dictionary (DOCX)
+            </button>
+            <button
               class="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-foreground hover:bg-accent"
               @click="exportPng"
               type="button"
@@ -337,7 +477,8 @@ async function handleComputeDiff() {
           </div>
         </div>
 
-        <div class="ml-auto text-xs text-muted-foreground">
+        <div class="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          <span v-if="saving" class="text-[10px]">saving...</span>
           {{ nodes.length }} tables
           <span v-if="edges.length"> · {{ edges.length }} relations</span>
         </div>
@@ -356,18 +497,25 @@ async function handleComputeDiff() {
         />
       </div>
 
-      <!-- Graph -->
-      <div v-else class="flex-1">
-        <SchemaGraph
-          :nodes="filteredNodes"
-          :edges="edges"
-          :loading="loading"
-          :hovered-node="hoveredNode"
-          @node-click="handleNodeClick"
-          @node-enter="handleNodeEnter"
-          @node-leave="handleNodeLeave"
-          @viewport-change="onViewportChange"
-        />
+          <!-- Graph drop zone -->
+          <div
+            v-else class="flex-1"
+            @dragover.prevent
+            @drop.prevent="handleDropOnGraph"
+          >
+            <SchemaGraph
+              :nodes="filteredNodes"
+              :edges="edges"
+              :loading="loading"
+              :hovered-node="hoveredNode"
+            @node-click="handleNodeClick"
+            @node-enter="handleNodeEnter"
+            @node-leave="handleNodeLeave"
+            @node-drag-stop="handleNodeDragStop"
+            @viewport-change="onViewportChange"
+            />
+          </div>
+        </div>
       </div>
     </template>
   </div>
@@ -382,5 +530,11 @@ async function handleComputeDiff() {
     :open="importDialogOpen"
     @close="importDialogOpen = false"
     @imported="handleImported"
+  />
+
+  <PromptToErdDialog
+    :open="promptDialogOpen"
+    @close="promptDialogOpen = false"
+    @imported="handlePromptImported"
   />
 </template>

@@ -9,10 +9,10 @@ use Illuminate\Contracts\Support\Arrayable;
 readonly class ExplainNodeDTO implements Arrayable
 {
     /**
-     * @param array<string, mixed> $costInfo
-     * @param string[] $usedColumns
-     * @param ExplainNodeDTO[] $children
-     * @param array<string, mixed> $extra
+     * @param  array<string, mixed>  $costInfo
+     * @param  string[]  $usedColumns
+     * @param  ExplainNodeDTO[]  $children
+     * @param  array<string, mixed>  $extra
      */
     public function __construct(
         public string $id,
@@ -31,7 +31,7 @@ readonly class ExplainNodeDTO implements Arrayable
     ) {}
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
     {

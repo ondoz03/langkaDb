@@ -24,7 +24,7 @@ class RelationMapper
                 foreach ($localColumns as $i => $localCol) {
                     $foreignCol = $foreignColumns[$i] ?? null;
 
-                    if (!$foreignCol) {
+                    if (! $foreignCol) {
                         continue;
                     }
 
