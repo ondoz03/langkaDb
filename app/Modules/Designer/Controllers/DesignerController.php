@@ -51,6 +51,13 @@ class DesignerController extends Controller
             'nodes.*.x_pos' => 'numeric',
             'nodes.*.y_pos' => 'numeric',
             'nodes.*.metadata' => 'nullable|array',
+            'relations' => 'nullable|array',
+            'relations.*.from_table' => 'required|string',
+            'relations.*.from_column' => 'required|string',
+            'relations.*.to_table' => 'required|string',
+            'relations.*.to_column' => 'required|string',
+            'relations.*.type' => 'nullable|string',
+            'relations.*.name' => 'nullable|string',
         ]);
 
         $diagram = $this->designerService->create($validated);
@@ -70,6 +77,13 @@ class DesignerController extends Controller
             'nodes.*.x_pos' => 'numeric',
             'nodes.*.y_pos' => 'numeric',
             'nodes.*.metadata' => 'nullable|array',
+            'relations' => 'nullable|array',
+            'relations.*.from_table' => 'required|string',
+            'relations.*.from_column' => 'required|string',
+            'relations.*.to_table' => 'required|string',
+            'relations.*.to_column' => 'required|string',
+            'relations.*.type' => 'nullable|string',
+            'relations.*.name' => 'nullable|string',
         ]);
 
         $diagram = $this->designerService->update($id, $validated);

@@ -1,6 +1,6 @@
 import dagre from '@dagrejs/dagre'
 import type { Node, Edge, ViewportTransform } from '@vue-flow/core'
-import { ref } from 'vue'
+import { ref, computed, triggerRef } from 'vue'
 
 interface ColumnData {
   name: string
@@ -22,8 +22,25 @@ export interface TableData {
   tableName: string
   columns: ColumnData[]
   indexes?: IndexData[]
+  foreignKeys?: ForeignKeyData[]
   rowCount: number
   sizeKb: number
+}
+
+interface ForeignKeyData {
+  column: string
+  referencesTable: string
+  referencesColumn: string
+  onDelete?: string
+}
+
+interface DiagramRelationData {
+  from_table: string
+  from_column: string
+  to_table: string
+  to_column: string
+  type: string
+  name?: string | null
 }
 
 interface SchemaTable {
@@ -55,7 +72,6 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 export function useGraph() {
   const schema = ref<SchemaResponse | null>(null)
   const nodes = ref<Node[]>([])
-  const edges = ref<Edge[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const hoveredNode = ref<string | null>(null)
@@ -64,6 +80,52 @@ export function useGraph() {
   const searchQuery = ref('')
   const showOnlyConnected = ref(false)
   const saving = ref(false)
+  const relations = ref<DiagramRelationData[]>([])
+
+  // Edges are computed dynamically from relations + node positions
+  // so that .left/.right handle suffixes match relative table positions
+  const edges = computed<Edge[]>(() => {
+    const allRelations = [
+      ...(schema.value?.relations ?? []),
+      ...relations.value,
+    ]
+
+    // Deduplicate
+    const seen = new Set<string>()
+    const uniqueRels = allRelations.filter(r => {
+      const key = `${r.from_table}.${r.from_column}->${r.to_table}.${r.to_column}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    // Map node X positions
+    const posMap = new Map<string, number>()
+    for (const node of nodes.value) {
+      posMap.set(node.id, node.position.x)
+    }
+
+    return uniqueRels.map((rel) => {
+      const sourceX = posMap.get(rel.from_table) ?? 0
+      const targetX = posMap.get(rel.to_table) ?? 0
+
+      // Source is left of target → source.right → target.left
+      // Source is right of target → source.left → target.right
+      const isSourceLeft = sourceX < targetX
+      const sourceHandle = `${rel.from_table}.${rel.from_column}.${isSourceLeft ? 'right' : 'left'}`
+      const targetHandle = `${rel.to_table}.${rel.to_column}.${isSourceLeft ? 'left' : 'right'}`
+
+      return {
+        id: `${rel.from_table}.${rel.from_column}_to_${rel.to_table}.${rel.to_column}`,
+        source: rel.from_table,
+        target: rel.to_table,
+        sourceHandle,
+        targetHandle,
+        type: 'relation',
+        data: { fromColumn: rel.from_column, toColumn: rel.to_column },
+      }
+    })
+  })
 
   function getFilteredNodes() {
     let result: any[] = [...nodes.value]
@@ -81,6 +143,7 @@ export function useGraph() {
   async function loadPositions(connectionId: string): Promise<{
     positions: Map<string, { x: number; y: number }>
     customTables: TableData[]
+    customRelations: DiagramRelationData[]
   } | null> {
     try {
       const res = await fetch(`/api/connections/${connectionId}/designer/diagrams`)
@@ -91,19 +154,30 @@ export function useGraph() {
       const latest = diagrams[diagrams.length - 1]
       const posMap = new Map<string, { x: number; y: number }>()
       const customTables: TableData[] = []
+      const customRelations: DiagramRelationData[] = []
       for (const node of latest.nodes ?? []) {
         posMap.set(node.table_name, { x: node.x_pos, y: node.y_pos })
         if (node.metadata?.columns) {
           customTables.push(node.metadata as TableData)
         }
       }
-      return { positions: posMap, customTables }
+      for (const rel of latest.relations ?? []) {
+        customRelations.push({
+          from_table: rel.from_table,
+          from_column: rel.from_column,
+          to_table: rel.to_table,
+          to_column: rel.to_column,
+          type: rel.type ?? 'belongs_to',
+          name: rel.name ?? null,
+        })
+      }
+      return { positions: posMap, customTables, customRelations }
     } catch {
       return null
     }
   }
 
-  function savePositions(connectionId: string, nodeList: any[]) {
+  function savePositions(connectionId: string, nodeList: any[], relList?: any[]) {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(async () => {
       saving.value = true
@@ -113,6 +187,15 @@ export function useGraph() {
           x_pos: Math.round(n.position.x),
           y_pos: Math.round(n.position.y),
           metadata: (n.data as TableData) ?? null,
+        }))
+
+        const relationsData = (relList ?? []).map((r: any) => ({
+          from_table: r.from_table,
+          from_column: r.from_column,
+          to_table: r.to_table,
+          to_column: r.to_column,
+          type: r.type ?? 'belongs_to',
+          name: r.name ?? null,
         }))
 
         const listRes = await fetch(`/api/connections/${connectionId}/designer/diagrams`)
@@ -129,6 +212,7 @@ export function useGraph() {
               name: `Diagram - ${new Date().toLocaleDateString()}`,
               connection_id: connectionId,
               nodes: nodesData,
+              relations: relationsData,
               layout_data: { viewport: { x: 0, y: 0, zoom: 0.6 } },
             }),
           })
@@ -141,6 +225,7 @@ export function useGraph() {
               name: `Diagram - ${new Date().toLocaleDateString()}`,
               connection_id: connectionId,
               nodes: nodesData,
+              relations: relationsData,
             }),
           })
         }
@@ -181,6 +266,22 @@ export function useGraph() {
         }
       }
 
+      // Merge custom relations from saved diagram
+      const customRelations = saved?.customRelations ?? []
+      const existingRels = new Set(data.relations.map((r: SchemaRelation) =>
+        `${r.from_table}.${r.from_column}->${r.to_table}.${r.to_column}`
+      ))
+      for (const cr of customRelations) {
+        const key = `${cr.from_table}.${cr.from_column}->${cr.to_table}.${cr.to_column}`
+        if (!existingRels.has(key)) {
+          data.relations.push(cr as SchemaRelation)
+          existingRels.add(key)
+        }
+      }
+
+      // Also populate the relations ref so auto-save preserves them
+      relations.value = customRelations
+
       buildGraph(data, saved?.positions ?? null)
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load schema'
@@ -190,14 +291,47 @@ export function useGraph() {
   }
 
   function buildGraph(data: SchemaResponse, savedPositions?: Map<string, { x: number; y: number }> | null) {
+    // Build foreignKey map from both schema and custom relations
+    const fkMap = new Map<string, ForeignKeyData[]>()
+    const allSourceRels = [...data.relations, ...relations.value]
+    for (const rel of allSourceRels) {
+      if (!fkMap.has(rel.from_table)) fkMap.set(rel.from_table, [])
+      const existing = fkMap.get(rel.from_table)!
+      const dup = existing.some(fk => fk.column === rel.from_column && fk.referencesTable === rel.to_table)
+      if (!dup) {
+        existing.push({
+          column: rel.from_column,
+          referencesTable: rel.to_table,
+          referencesColumn: rel.to_column,
+        })
+      }
+    }
+
     const graphNodes: Node[] = data.tables.map((table) => ({
       id: table.name,
       type: 'table',
       position: { x: 0, y: 0 },
-      data: { tableName: table.name, columns: table.columns, indexes: table.indexes, rowCount: table.row_count, sizeKb: table.size_mb * 1000 } as TableData,
+      data: {
+        tableName: table.name,
+        columns: table.columns,
+        indexes: table.indexes,
+        foreignKeys: fkMap.get(table.name) ?? [],
+        rowCount: table.row_count,
+        sizeKb: table.size_mb * 1000,
+      } as TableData,
     }))
 
-    const graphEdges: Edge[] = data.relations.map((rel) => ({
+    // Build edge list for dagre layout only (handles are computed dynamically)
+    const allRels = [...data.relations, ...relations.value]
+    const seen = new Set<string>()
+    const uniqueRels = allRels.filter(r => {
+      const key = `${r.from_table}.${r.from_column}->${r.to_table}.${r.to_column}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+    const graphEdges: Edge[] = uniqueRels.map((rel) => ({
       id: `${rel.from_table}.${rel.from_column}_to_${rel.to_table}.${rel.to_column}`,
       source: rel.from_table,
       target: rel.to_table,
@@ -217,7 +351,6 @@ export function useGraph() {
     } else {
       nodes.value = applyDagreLayout(graphNodes, graphEdges)
     }
-    edges.value = graphEdges
   }
 
   function applyDagreLayout(nodeList: Node[], edgeList: Edge[]): Node[] {
@@ -260,6 +393,43 @@ export function useGraph() {
     if (schema.value) buildGraph(schema.value)
   }
 
+  function addForeignKeysToRelations(tableName: string, foreignKeys: ForeignKeyData[]) {
+    if (!foreignKeys || foreignKeys.length === 0) return
+
+    const existing = new Set(relations.value.map(r =>
+      `${r.from_table}.${r.from_column}->${r.to_table}.${r.to_column}`
+    ))
+
+    for (const fk of foreignKeys) {
+      const key = `${tableName}.${fk.column}->${fk.referencesTable}.${fk.referencesColumn}`
+      if (!existing.has(key)) {
+        const newRel: DiagramRelationData = {
+          from_table: tableName,
+          from_column: fk.column,
+          to_table: fk.referencesTable,
+          to_column: fk.referencesColumn,
+          type: 'belongs_to',
+          name: `fk_${tableName}_${fk.column}`,
+        }
+        relations.value.push(newRel)
+        existing.add(key)
+      }
+    }
+  }
+
+  // --- Dynamic edge reactivity during drag ---
+  // triggerRef forces Vue computed (edges) to re-evaluate without replacing the array,
+  // so Vue Flow's internal drag state is preserved
+
+  function notifyDrag() {
+    triggerRef(nodes)
+  }
+
+  function rebuildEdges() {
+    // Obsolete: edges are now computed dynamically from schema + relations + node positions.
+    // This function is kept for backward compatibility — callers don't need it anymore.
+  }
+
   return {
     schema,
     nodes,
@@ -280,5 +450,9 @@ export function useGraph() {
     closePanel,
     onViewportChange,
     rearrange,
+    relations,
+    addForeignKeysToRelations,
+    rebuildEdges,
+    notifyDrag,
   }
 }

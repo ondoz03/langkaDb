@@ -730,6 +730,7 @@ PROMPT;
         $request->validate([
             'prompt' => 'required|string|min:10|max:2000',
             'provider' => 'nullable|string',
+            'model_id' => 'nullable|string',
             'api_key' => 'nullable|string',
         ]);
 
@@ -759,6 +760,7 @@ PROMPT;
                 systemPrompt: $systemPrompt,
                 apiKey: $apiKey,
                 provider: $provider,
+                modelId: $request->input('model_id'),
             );
 
             // If AI returned empty or no SQL, provide fallback from rule-based

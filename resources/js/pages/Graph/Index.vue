@@ -13,11 +13,12 @@ import { useExport } from '@/composables/useExport'
 import { useSchemaSnapshot } from '@/composables/useSchemaSnapshot'
 import { useConnectionStore } from '@/stores/connection'
 import type { TableData } from '@/composables/useGraph'
-import { Search, RefreshCw, Download, ChevronDown, Image, FileType, Upload, Camera, ArrowLeftRight, X, AlertTriangle, PanelLeft, Sparkles } from 'lucide-vue-next'
+import { Search, RefreshCw, Download, ChevronDown, Image, FileType, Upload, Camera, ArrowLeftRight, X, AlertTriangle, PanelLeft, Sparkles, Database } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 
 const store = useConnectionStore()
-const { nodes, edges, getFilteredNodes, loading, saving, hoveredNode, selectedNode, searchQuery, showOnlyConnected, loadSchema, buildGraph, savePositions, onNodeClick, closePanel, onViewportChange, rearrange, schema } = useGraph()
+const { nodes, edges, getFilteredNodes, loading, saving, hoveredNode, selectedNode, searchQuery, showOnlyConnected, loadSchema, buildGraph, savePositions, onNodeClick, closePanel, onViewportChange, rearrange, schema, relations, addForeignKeysToRelations, rebuildEdges } = useGraph()
 const { loading: exporting, exportSql, exportDocx } = useExport()
 const { snapshots, loading: snapshotLoading, fetchSnapshots, createSnapshot, deleteSnapshot, computeDiff } = useSchemaSnapshot()
 
@@ -39,17 +40,23 @@ function collectTableData(): TableData[] {
   if (!schema.value) return canvasNodes.map(n => n.data as TableData)
 
   const onCanvas = new Set(canvasNodes.map(n => n.id))
+  
+  // Schema tables (no FK data yet - those come from canvas nodes)
   const all: TableData[] = schema.value.tables.map(t => ({
     tableName: t.name,
     columns: t.columns as TableData['columns'],
     indexes: (t.indexes ?? []) as TableData['indexes'],
+    foreignKeys: [],
     rowCount: t.row_count,
     sizeKb: t.size_mb * 1000,
   }))
+  
+  // Canvas tables already have FK data from buildGraph
   const canvasTables: TableData[] = canvasNodes.map(n => n.data as TableData)
 
+  // Canvas data first (overrides schema)
   const seen = new Set<string>()
-  return [...all, ...canvasTables].filter(t => {
+  return [...canvasTables, ...all].filter(t => {
     if (seen.has(t.tableName)) return false
     seen.add(t.tableName)
     return true
@@ -151,7 +158,26 @@ async function exportSvg() {
 }
 
 function handleImported(data: any) {
-  buildGraph(data)
+    const transformed = {
+    database: 'imported',
+    tables: (data.tables || []).map((t: any) => ({
+      name: t.name,
+      columns: t.columns || [],
+      indexes: t.indexes || [],
+      row_count: t.row_count ?? 0,
+      size_mb: t.size_mb ?? 0,
+    })),
+    relations: (data.relations || []).map((r: any) => ({
+      name: r.name || `fk_${r.fromTable || r.from_table}_${r.fromColumn || r.from_column}`,
+      from_table: r.fromTable || r.from_table,
+      from_column: r.fromColumn || r.from_column,
+      to_table: r.toTable || r.to_table,
+      to_column: r.toColumn || r.to_column,
+      type: r.type || 'belongs_to',
+    })),
+    summary: data.summary || { total_tables: (data.tables || []).length, total_relations: (data.relations || []).length, total_indexes: 0 },
+  }
+  buildGraph(transformed)
 }
 
 async function handleCreateSnapshot() {
@@ -189,13 +215,36 @@ function handleCreateTable(tableData: TableData) {
   } else {
     handleAddTable(tableData)
   }
+  
+  // Add foreign keys as relations
+  if (tableData.foreignKeys && tableData.foreignKeys.length > 0) {
+    addForeignKeysToRelations(tableData.tableName, tableData.foreignKeys)
+  }
 }
 
-function handleRemoveTable(tableName: string) {
+const deleteConfirmRef = ref<InstanceType<typeof ConfirmDialog>>()
+const deleteTarget = ref<string | null>(null)
+
+function confirmRemoveTable(tableName: string) {
+  deleteTarget.value = tableName
+}
+
+function handleRemoveTable() {
+  const tableName = deleteTarget.value
+  if (!tableName) return
+  
   nodes.value = (nodes.value as any[]).filter((n: any) => n.id !== tableName) as any
+  
+  // Also remove related relations
+  relations.value = relations.value.filter(r => r.from_table !== tableName && r.to_table !== tableName)
+  rebuildEdges()
+  
   if (selectedNode.value?.tableName === tableName) {
     closePanel()
   }
+  
+  deleteTarget.value = null
+  toast.success(`Table "${tableName}" removed`)
 }
 
 function handleEditTable(tableData: TableData) {
@@ -214,21 +263,158 @@ function handleDropOnGraph(e: DragEvent) {
 }
 
 function handlePromptImported(data: any) {
-  buildGraph(data)
+  // Transform ParsedTable[] to SchemaTable[] format
+  const transformedTables = (data.tables || []).map((t: any) => ({
+    name: t.name,
+    columns: t.columns || [],
+    indexes: t.indexes || [],
+    row_count: t.row_count ?? 0,
+    size_mb: t.size_mb ?? 0,
+  }))
+
+  const transformedRels = (data.relations || []).map((r: any) => ({
+    name: r.name || `fk_${r.fromTable || r.from_table}_${r.fromColumn || r.from_column}`,
+    from_table: r.fromTable || r.from_table,
+    from_column: r.fromColumn || r.from_column,
+    to_table: r.toTable || r.to_table,
+    to_column: r.toColumn || r.to_column,
+    type: r.type || 'belongs_to',
+  }))
+
+  const transformed = {
+    database: 'generated',
+    tables: transformedTables,
+    relations: transformedRels,
+    summary: data.summary || { total_tables: transformedTables.length, total_relations: transformedRels.length, total_indexes: 0 },
+  }
+
+  // Store relations from generated schema into relations.value so they survive save
+  for (const rel of transformedRels) {
+    const exists = relations.value.some(r => r.from_table === rel.from_table && r.from_column === rel.from_column && r.to_table === rel.to_table)
+    if (!exists) {
+      relations.value.push(rel)
+    }
+  }
+
+  buildGraph(transformed)
   promptDialogOpen.value = false
 }
 
 function handleNodeDragStop(node: any) {
   if (store.activeConnectionId) {
-    savePositions(store.activeConnectionId, nodes.value as any[])
+    savePositions(store.activeConnectionId, nodes.value as any[], relations.value)
+  }
+}
+
+async function handleSendToDb() {
+  if (!store.activeConnectionId) {
+    toast.error('No active connection')
+    return
+  }
+
+  // Generate SQL from current graph state
+  const tables = nodes.value.map((n: any) => n.data as TableData)
+  if (tables.length === 0) {
+    toast.error('No tables in graph to export')
+    return
+  }
+
+  try {
+    // Build CREATE TABLE + ALTER TABLE ADD FOREIGN KEY SQL
+    const parts: string[] = []
+    const fkParts: string[] = []
+    for (const t of tables) {
+      const colDefs = t.columns.map(c => {
+        let def = `  \`${c.name}\` ${c.type.toUpperCase()}${c.primary ? ' PRIMARY KEY' : c.nullable ? '' : ' NOT NULL'}${c.default !== null ? ` DEFAULT ${c.default}` : ''}`
+        return def
+      })
+      const pkCols = t.columns.filter(c => c.primary).map(c => `\`${c.name}\``)
+      if (pkCols.length > 1) {
+        colDefs.push(`  PRIMARY KEY (${pkCols.join(', ')})`)
+      }
+      
+      let sql = `CREATE TABLE IF NOT EXISTS \`${t.tableName}\` (\n${colDefs.join(",\n")}\n) ENGINE=InnoDB;`
+      parts.push(sql)
+      
+      // FK constraints
+      for (const fk of (t.foreignKeys ?? [])) {
+        fkParts.push(`ALTER TABLE \`${t.tableName}\` ADD FOREIGN KEY (\`${fk.column}\`) REFERENCES \`${fk.referencesTable}\`(\`${fk.referencesColumn}\`) ON DELETE ${fk.onDelete ?? 'RESTRICT'};`)
+      }
+    }
+
+    const fullSql = [...parts, ...fkParts].join('\n\n')
+
+    const res = await fetch(`/api/connections/${store.activeConnectionId}/schema/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ sql: fullSql, tables }),
+    })
+
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.message || 'Failed to apply schema')
+    }
+
+    const json = await res.json()
+    toast.success(`Schema applied to DB: ${json.data?.created ?? 0} created, ${json.data?.updated ?? 0} updated`)
+
+    // Reload schema to refresh from DB
+    if (store.activeConnectionId) {
+      await loadSchema(store.activeConnection.id)
+    }
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Failed to export to DB')
+  }
+}
+
+async function handleExportToDb(data: any) {
+  if (!store.activeConnectionId) {
+    toast.error('No active connection')
+    return
+  }
+
+  try {
+    const res = await fetch(`/api/connections/${store.activeConnectionId}/schema/apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        sql: data.sql,
+        tables: data.tables,
+        relations: data.relations,
+      }),
+    })
+
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.message || 'Failed to apply schema')
+    }
+
+    const json = await res.json()
+    toast.success(`Schema applied: ${json.data?.created ?? 0} created, ${json.data?.updated ?? 0} updated`)
+
+    // Reload schema
+    if (store.activeConnectionId) {
+      await loadSchema(store.activeConnection.id)
+    }
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : 'Failed to export schema')
   }
 }
 
 watch(() => (nodes.value as any[]).length, () => {
   if (store.activeConnectionId && (nodes.value as any[]).length > 0) {
-    savePositions(store.activeConnectionId, nodes.value as any[])
+    savePositions(store.activeConnectionId, nodes.value as any[], relations.value)
   }
 })
+
+// Auto-save on relations changes
+watch(relations, () => {
+  if (store.activeConnectionId && (nodes.value as any[]).length > 0) {
+    savePositions(store.activeConnectionId, nodes.value as any[], relations.value)
+  }
+}, { deep: true })
 
 async function handleComputeDiff() {
   if (!selectedSnapshotA.value || !selectedSnapshotB.value) return
@@ -285,7 +471,7 @@ async function handleComputeDiff() {
             :tables="allTableData"
             :canvas-table-names="canvasTableNames"
             @add-table="handleAddTable"
-            @remove-table="handleRemoveTable"
+            @remove-table="confirmRemoveTable"
             @edit-table="handleEditTable"
             @create-table="handleCreateTable"
           />
@@ -339,6 +525,15 @@ async function handleComputeDiff() {
         >
           <Sparkles class="h-3.5 w-3.5" />
           AI Schema
+        </button>
+
+        <button
+          class="flex items-center gap-1 rounded-md border border-green-500/30 bg-green-500/10 px-2.5 py-1.5 text-xs text-green-500 transition-colors hover:bg-green-500/20"
+          :disabled="nodes.length === 0"
+          @click="handleSendToDb"
+        >
+          <Database class="h-3.5 w-3.5" />
+          Send to DB
         </button>
 
         <!-- Snapshot menu -->
@@ -534,7 +729,18 @@ async function handleComputeDiff() {
 
   <PromptToErdDialog
     :open="promptDialogOpen"
+    :existing-tables="canvasTableNames"
     @close="promptDialogOpen = false"
     @imported="handlePromptImported"
+    @export-to-db="handleExportToDb"
+  />
+
+  <ConfirmDialog
+    :open="!!deleteTarget"
+    title="Remove Table"
+    :description="`Are you sure you want to remove table &quot;${deleteTarget || ''}&quot; from the graph? This will also remove all related foreign key connections.`"
+    confirm-text="Remove"
+    @confirm="handleRemoveTable"
+    @cancel="deleteTarget = null"
   />
 </template>

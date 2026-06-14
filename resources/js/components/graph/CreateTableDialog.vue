@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Plus, X, Trash2, GripVertical } from 'lucide-vue-next'
+import { ref, watch, computed } from 'vue'
+import { Plus, X, Trash2, GripVertical, Link2 } from 'lucide-vue-next'
 import type { TableData } from '@/composables/useGraph'
 
 interface ColumnRow {
@@ -11,9 +11,19 @@ interface ColumnRow {
   primary: boolean
 }
 
+interface ForeignKeyRow {
+  id: number
+  column: string
+  referencesTable: string
+  referencesColumn: string
+  onDelete: string
+}
+
 const props = defineProps<{
   open: boolean
   editTable?: TableData | null
+  existingTables?: string[]
+  existingColumns?: Record<string, string[]>
 }>()
 
 const emit = defineEmits<{
@@ -23,9 +33,21 @@ const emit = defineEmits<{
 
 const tableName = ref('')
 const columns = ref<ColumnRow[]>([{ id: 1, name: '', type: 'VARCHAR', nullable: true, primary: false }])
-let nextId = 2
+const foreignKeys = ref<ForeignKeyRow[]>([])
+let nextColId = 2
+let nextFkId = 1
 
 const TYPES = ['VARCHAR', 'INT', 'BIGINT', 'TINYINT', 'TEXT', 'BOOLEAN', 'DATETIME', 'DATE', 'FLOAT', 'DECIMAL', 'JSON', 'BLOB', 'CHAR']
+
+const allTableNames = computed(() => props.existingTables ?? [])
+
+const columnsForTable = computed(() => {
+  const map: Record<string, string[]> = {}
+  if (props.existingColumns) {
+    Object.assign(map, props.existingColumns)
+  }
+  return map
+})
 
 watch(() => props.open, (val) => {
   if (val && props.editTable) {
@@ -37,21 +59,39 @@ watch(() => props.open, (val) => {
       nullable: c.nullable,
       primary: c.primary,
     }))
-    nextId = columns.value.length + 1
+    nextColId = columns.value.length + 1
+    foreignKeys.value = (props.editTable.foreignKeys ?? []).map((fk, i) => ({
+      id: i + 1,
+      column: fk.column,
+      referencesTable: fk.referencesTable,
+      referencesColumn: fk.referencesColumn,
+      onDelete: fk.onDelete ?? 'RESTRICT',
+    }))
+    nextFkId = foreignKeys.value.length + 1
   } else if (val) {
     tableName.value = ''
     columns.value = [{ id: 1, name: '', type: 'VARCHAR', nullable: true, primary: false }]
-    nextId = 2
+    foreignKeys.value = []
+    nextColId = 2
+    nextFkId = 1
   }
 })
 
 function addColumn() {
-  columns.value.push({ id: nextId++, name: '', type: 'VARCHAR', nullable: true, primary: false })
+  columns.value.push({ id: nextColId++, name: '', type: 'VARCHAR', nullable: true, primary: false })
 }
 
 function removeColumn(id: number) {
   if (columns.value.length <= 1) return
   columns.value = columns.value.filter(c => c.id !== id)
+}
+
+function addForeignKey() {
+  foreignKeys.value.push({ id: nextFkId++, column: '', referencesTable: '', referencesColumn: '', onDelete: 'RESTRICT' })
+}
+
+function removeForeignKey(id: number) {
+  foreignKeys.value = foreignKeys.value.filter(fk => fk.id !== id)
 }
 
 function handleCreate() {
@@ -72,6 +112,12 @@ function handleCreate() {
     tableName: tableName.value.trim(),
     columns: cols,
     indexes: primaryCols.length > 0 ? [{ name: 'PRIMARY', columns: primaryCols, unique: true, type: 'primary' }] : [],
+    foreignKeys: foreignKeys.value.map(fk => ({
+      column: fk.column,
+      referencesTable: fk.referencesTable,
+      referencesColumn: fk.referencesColumn,
+      onDelete: fk.onDelete,
+    })),
     rowCount: 0,
     sizeKb: 0,
   }
@@ -99,7 +145,7 @@ function handleCreate() {
       </div>
 
       <!-- Body -->
-      <div class="space-y-4 p-5">
+      <div class="max-h-[65vh] space-y-4 overflow-y-auto p-5">
         <!-- Table name -->
         <div>
           <label class="text-xs font-medium text-foreground">Table Name</label>
@@ -160,6 +206,87 @@ function handleCreate() {
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- Foreign Keys -->
+        <div>
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-medium text-foreground">Foreign Keys</label>
+            <button
+              class="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+              @click="addForeignKey"
+            >
+              <Link2 class="h-3 w-3" />
+              Add relation
+            </button>
+          </div>
+
+          <div v-if="foreignKeys.length === 0" class="mt-1 text-[10px] text-muted-foreground/50">
+            No foreign keys defined. Add relations to connect tables.
+          </div>
+
+          <div class="mt-2 space-y-2">
+            <div
+              v-for="fk in foreignKeys"
+              :key="fk.id"
+              class="rounded-md border border-border/50 bg-black/10 p-2"
+            >
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] font-medium text-foreground/70">Relation</span>
+                <button
+                  class="rounded p-0.5 text-muted-foreground/50 hover:text-red-500"
+                  @click="removeForeignKey(fk.id)"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5">
+                <div>
+                  <label class="text-[9px] text-muted-foreground">From Column</label>
+                  <input
+                    v-model="fk.column"
+                    type="text"
+                    placeholder="column name"
+                    class="w-full rounded border border-border/50 bg-black/20 px-1.5 py-1 text-[10px] text-foreground outline-none placeholder:text-muted-foreground/30 focus:border-ring font-mono"
+                  />
+                </div>
+                <div>
+                  <label class="text-[9px] text-muted-foreground">References Table</label>
+                  <input
+                    v-model="fk.referencesTable"
+                    type="text"
+                    placeholder="table name"
+                    list="existing-tables"
+                    class="w-full rounded border border-border/50 bg-black/20 px-1.5 py-1 text-[10px] text-foreground outline-none placeholder:text-muted-foreground/30 focus:border-ring font-mono"
+                  />
+                </div>
+                <div>
+                  <label class="text-[9px] text-muted-foreground">References Column</label>
+                  <input
+                    v-model="fk.referencesColumn"
+                    type="text"
+                    placeholder="column name"
+                    class="w-full rounded border border-border/50 bg-black/20 px-1.5 py-1 text-[10px] text-foreground outline-none placeholder:text-muted-foreground/30 focus:border-ring font-mono"
+                  />
+                </div>
+                <div>
+                  <label class="text-[9px] text-muted-foreground">On Delete</label>
+                  <select
+                    v-model="fk.onDelete"
+                    class="w-full rounded border border-border/50 bg-black/20 px-1 py-1 text-[10px] text-foreground outline-none focus:border-ring"
+                  >
+                    <option value="RESTRICT">RESTRICT</option>
+                    <option value="CASCADE">CASCADE</option>
+                    <option value="SET NULL">SET NULL</option>
+                    <option value="NO ACTION">NO ACTION</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          <datalist id="existing-tables">
+            <option v-for="t in allTableNames" :key="t" :value="t" />
+          </datalist>
         </div>
       </div>
 

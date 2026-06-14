@@ -16,6 +16,7 @@ readonly class DiagramDTO implements Arrayable
         public ?string $connectionId,
         public ?array $layoutData,
         public array $nodes,
+        public array $relations,
         public string $createdAt,
         public string $updatedAt,
     ) {}
@@ -31,6 +32,9 @@ readonly class DiagramDTO implements Arrayable
             nodes: $diagram->relationLoaded('nodes')
                 ? $diagram->nodes->map(fn ($n) => DiagramNodeDTO::fromModel($n))->toArray()
                 : [],
+            relations: $diagram->relationLoaded('relations')
+                ? $diagram->relations->map(fn ($r) => DiagramRelationDTO::fromModel($r))->toArray()
+                : [],
             createdAt: $diagram->created_at?->toIso8601String() ?? '',
             updatedAt: $diagram->updated_at?->toIso8601String() ?? '',
         );
@@ -45,6 +49,7 @@ readonly class DiagramDTO implements Arrayable
             'connection_id' => $this->connectionId,
             'layout_data' => $this->layoutData,
             'nodes' => $this->nodes,
+            'relations' => $this->relations,
             'created_at' => $this->createdAt,
             'updated_at' => $this->updatedAt,
         ];

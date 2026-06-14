@@ -30,6 +30,16 @@ const filteredTables = computed(() => {
 
 const canvasSet = computed(() => new Set(props.canvasTableNames))
 
+const existingTableNames = computed(() => props.tables.map(t => t.tableName))
+
+const existingColumns = computed(() => {
+  const map: Record<string, string[]> = {}
+  for (const t of props.tables) {
+    map[t.tableName] = t.columns.map(c => c.name)
+  }
+  return map
+})
+
 function handleCreateTable(data: TableData) {
   emit('createTable', data)
   showDialog.value = false
@@ -135,6 +145,8 @@ function onDragStart(e: DragEvent, table: TableData) {
   <CreateTableDialog
     :open="showDialog"
     :edit-table="editingTable"
+    :existing-tables="existingTableNames"
+    :existing-columns="existingColumns"
     @close="closeDialog"
     @create="handleCreateTable"
   />

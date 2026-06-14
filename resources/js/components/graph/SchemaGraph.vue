@@ -45,7 +45,7 @@ const emit = defineEmits<{
       :min-zoom="0.05"
       :max-zoom="4"
       :node-styles="(n: Node) => ({ opacity: hoveredNode && hoveredNode !== n.id ? 0.3 : 1, transition: 'all 0.15s ease' })"
-      :default-edge-options="{ style: { stroke: '#525252', strokeWidth: 1 } }"
+      :default-edge-options="{ type: 'relation' }"
       class="h-full w-full"
       @node-click="emit('node-click', $event.node)"
       @node-enter="emit('node-enter', $event.node.id)"

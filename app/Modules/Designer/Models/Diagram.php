@@ -32,4 +32,9 @@ class Diagram extends Model
     {
         return $this->hasMany(DiagramNode::class);
     }
+
+    public function relations(): HasMany
+    {
+        return $this->hasMany(DiagramRelation::class);
+    }
 }

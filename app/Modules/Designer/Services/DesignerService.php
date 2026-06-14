@@ -37,21 +37,26 @@ class DesignerService
     public function create(array $data): DiagramDTO
     {
         $nodes = $data['nodes'] ?? [];
-        unset($data['nodes']);
+        $relations = $data['relations'] ?? [];
+        unset($data['nodes'], $data['relations']);
 
         $diagram = $this->repository->create($data);
 
         if (! empty($nodes)) {
             $this->repository->saveNodes($diagram->id, $nodes);
         }
+        if (! empty($relations)) {
+            $this->repository->saveRelations($diagram->id, $relations);
+        }
 
-        return DiagramDTO::fromModel($diagram->load('nodes'));
+        return DiagramDTO::fromModel($diagram->load('nodes', 'relations'));
     }
 
     public function update(string $id, array $data): ?DiagramDTO
     {
         $nodes = $data['nodes'] ?? null;
-        unset($data['nodes']);
+        $relations = $data['relations'] ?? null;
+        unset($data['nodes'], $data['relations']);
 
         $diagram = $this->repository->update($id, $data);
         if (! $diagram) {
@@ -61,8 +66,11 @@ class DesignerService
         if ($nodes !== null) {
             $this->repository->saveNodes($id, $nodes);
         }
+        if ($relations !== null) {
+            $this->repository->saveRelations($id, $relations);
+        }
 
-        return DiagramDTO::fromModel($diagram->fresh()->load('nodes'));
+        return DiagramDTO::fromModel($diagram->fresh()->load('nodes', 'relations'));
     }
 
     public function delete(string $id): bool

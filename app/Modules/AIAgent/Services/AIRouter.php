@@ -29,13 +29,14 @@ class AIRouter
         string $systemPrompt = '',
         ?string $apiKey = null,
         string $provider = 'rule',
+        ?string $modelId = null,
     ): string {
         $messages = [
             ['role' => 'system', 'content' => $systemPrompt ?: 'You are a helpful assistant.'],
             ['role' => 'user', 'content' => $prompt],
         ];
 
-        return $this->routeMessages($task, $messages, $apiKey, $provider);
+        return $this->routeMessages($task, $messages, $apiKey, $provider, $modelId);
     }
 
     public function routeMessages(
@@ -43,6 +44,7 @@ class AIRouter
         array $messages,
         ?string $apiKey = null,
         string $provider = 'rule',
+        ?string $modelId = null,
     ): string {
         $deterministicTasks = ['schema_analysis', 'security_analysis', 'optimization', 'domain_clustering'];
         $isDeterministic = in_array($task, $deterministicTasks, true);
@@ -66,13 +68,13 @@ class AIRouter
             }
 
             // Explicit external AI request for deterministic task
-            return $this->callExternal($task, $messages, $apiKey, $provider);
+            return $this->callExternal($task, $messages, $apiKey, $provider, $modelId);
         }
 
         // ── CREATIVE / CHAT TASKS ──────────────────────────────────────────
         // Prefer external AI for chat/documentation if key exists.
         if ($apiKey && $provider !== 'rule') {
-            $result = $this->callExternal($task, $messages, $apiKey, $provider);
+            $result = $this->callExternal($task, $messages, $apiKey, $provider, $modelId);
             if ($result) {
                 return $result;
             }
@@ -85,9 +87,9 @@ class AIRouter
     /**
      * Call external AI provider with automatic fallback.
      */
-    private function callExternal(string $task, array $messages, string $apiKey, string $provider): ?string
+    private function callExternal(string $task, array $messages, string $apiKey, string $provider, ?string $modelId = null): ?string
     {
-        $model = match ($provider) {
+        $model = $modelId ?? match ($provider) {
             'deepseek' => 'deepseek-chat',
             'anthropic' => 'claude-3-haiku-20240307',
             default => 'gpt-4o-mini',

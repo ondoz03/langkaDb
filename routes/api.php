@@ -75,4 +75,7 @@ Route::middleware(['auth', 'verified'])->prefix('api')->group(function () {
     Route::delete('designer/diagrams/{id}', [DesignerController::class, 'destroy'])->name('api.designer.diagrams.destroy');
     Route::get('connections/{connectionId}/designer/diagrams', [DesignerController::class, 'byConnection'])->name('api.connections.designer.diagrams');
     Route::post('designer/save-layout', [DesignerController::class, 'saveLayout'])->name('api.designer.save-layout');
+
+    // Schema apply (push generated schema to DB)
+    Route::post('connections/{id}/schema/apply', [SchemaController::class, 'apply'])->name('api.connections.schema.apply');
 });
